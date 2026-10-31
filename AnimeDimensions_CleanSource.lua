@@ -3,9 +3,9 @@
     🌟 ANIME DIMENSIONS SIMULATOR - PRO HUB (FULL 31 FEATURES)
     Mã nguồn sạch 100% không mã hóa - Chuẩn hóa toàn bộ tính năng SLH Hub
     ⚡ CẬP NHẬT MỚI:
-       - KILL AURA HOẠT ĐỘNG TRÊN MỌI MAP (ĐÃ BỎ GIỚI HẠN ONLY EXTREME)
        - TỰ ĐỘNG LƯU NGẦM 100% (KHÔNG CẦN BẤM LƯU / CHỈ CẦN BẬT TẮT NÚT)
        - AUTO REJOIN KHI BỊ KICK / MẤT KẾT NỐI
+       - DISCORD WEBHOOK THÔNG BÁO TỰ ĐỘNG
     ===================================================================
 ]]
 
@@ -53,7 +53,7 @@ local Settings = {
     -- 2. Combat & Mobs
     AutoMob = false,
     AutoMelee = true,
-    KillAura = false, -- ĐÃ BỎ ONLY EXTREME DIMENSION -> ĐÁNH LAN MỌI MAP
+    KillAura = false,
     AutoSkill = false,
     AutoAssistSkill = false,
     AutoFruitSkill = false,
@@ -182,7 +182,7 @@ local MainTab = Window:MakeTab({
     PremiumOnly = false
 })
 
-MainTab:AddParagraph("🟢 Tự Động Lưu 100%", "Mọi thay đổi bật/tắt sẽ TỰ ĐỘNG LƯU. Kill Aura hiện đã quét sạch quái trên MỌI MAP không bị giới hạn!")
+MainTab:AddParagraph("🟢 Tự Động Lưu 100%", "Mọi thay đổi bật/tắt sẽ TỰ ĐỘNG LƯU vào file cấu hình!")
 
 MainTab:AddToggle({
     Name = "Auto Play (Tự động chơi toàn bộ từ A đến Z)",
@@ -335,7 +335,7 @@ CombatTab:AddToggle({
 })
 
 CombatTab:AddToggle({
-    Name = "Kill Aura (Đánh lan toàn bộ quái trên MỌI MAP)",
+    Name = "Kill Aura",
     Default = Settings.KillAura,
     Callback = function(v)
         Settings.KillAura = v
@@ -851,7 +851,7 @@ task.spawn(function()
     end
 end)
 
--- 4. VÒNG LẶP KILL AURA (HOẠT ĐỘNG TRÊN MỌI MAP / ĐÃ BỎ GIỚI HẠN EXTREME)
+-- 4. VÒNG LẶP KILL AURA
 task.spawn(function()
     while task.wait(0.15) do
         if Settings.KillAura and Humanoid and Humanoid.Health > 0 then
