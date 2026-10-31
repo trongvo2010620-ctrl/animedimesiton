@@ -87,13 +87,18 @@ local Settings = {
     AutoBuyDioOverHeavenKey = false,
     AutoRedeemAllCode = false,
 
-    -- 6. Stealth, Rejoin & Discord
+    -- 6. Stealth & Rejoin
     AutoRejoin = true,
     RejoinDelay = 3,
     HideName = false,
     WhiteScreen = false,
+    WalkSpeed = 50,
+
+    -- 7. Discord Webhook
+    WebhookEnabled = false,
     WebhookURL = "",
-    WalkSpeed = 50
+    WebhookOnClear = true,
+    WebhookOnRejoin = true
 }
 
 -- Tự động nạp cấu hình cũ ngay khi mở file
@@ -113,6 +118,47 @@ local function AutoSave()
         if writefile then
             writefile(AutoSaveFile, HttpService:JSONEncode(Settings))
         end
+    end)
+end
+
+-- ===================================================================
+-- HÀM GỬI DISCORD WEBHOOK THÔNG MINH
+-- ===================================================================
+local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request or (Fluxus and Fluxus.request)
+
+local function SendDiscordWebhook(title, description, fields, color)
+    if not Settings.WebhookEnabled or not Settings.WebhookURL or Settings.WebhookURL == "" then return end
+    if not httpRequest then
+        warn("⚠️ [Webhook]: Executor của bạn không hỗ trợ hàm HTTP Request!")
+        return
+    end
+
+    local payload = {
+        username = "Anime Dimensions Pro Hub",
+        avatar_url = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LocalPlayer.UserId .. "&width=150&height=150&format=png",
+        embeds = {
+            {
+                title = title or "⚡ Thông Báo Anime Dimensions",
+                description = description or "",
+                color = color or 5814783,
+                fields = fields or {},
+                footer = {
+                    text = "Anime Dimensions Hub • " .. os.date("%d/%m/%Y %H:%M:%S")
+                },
+                timestamp = DateTime.now():ToIsoDate()
+            }
+        }
+    }
+
+    pcall(function()
+        httpRequest({
+            Url = Settings.WebhookURL,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
     end)
 end
 
@@ -607,6 +653,92 @@ MiscTab:AddSlider({
 })
 
 -- ===================================================================
+-- TAB 7: 📢 DISCORD WEBHOOK (THÔNG BÁO TỰ ĐỘNG)
+-- ===================================================================
+local WebhookTab = Window:MakeTab({
+    Name = "📢 Discord Webhook",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+WebhookTab:AddParagraph("📢 Báo Cáo Discord Webhook", "Dán Webhook URL kênh Discord của bạn vào ô bên dưới. Trạng thái và link sẽ tự động lưu vĩnh viễn!")
+
+WebhookTab:AddToggle({
+    Name = "Bật / Tắt Gửi Discord Webhook",
+    Default = Settings.WebhookEnabled,
+    Callback = function(v)
+        Settings.WebhookEnabled = v
+        AutoSave()
+    end
+})
+
+WebhookTab:AddTextbox({
+    Name = "Dán Discord Webhook URL",
+    Default = Settings.WebhookURL,
+    TextDisappear = false,
+    Callback = function(v)
+        Settings.WebhookURL = v
+        AutoSave()
+    end
+})
+
+WebhookTab:AddToggle({
+    Name = "Gửi Báo Cáo Khi Thắng / Clear Map (WebhookOnClear)",
+    Default = Settings.WebhookOnClear,
+    Callback = function(v)
+        Settings.WebhookOnClear = v
+        AutoSave()
+    end
+})
+
+WebhookTab:AddToggle({
+    Name = "Gửi Cảnh Báo Khi Bị Kick / Rejoin (WebhookOnRejoin)",
+    Default = Settings.WebhookOnRejoin,
+    Callback = function(v)
+        Settings.WebhookOnRejoin = v
+        AutoSave()
+    end
+})
+
+WebhookTab:AddButton({
+    Name = "🔔 Gửi Tin Nhắn Test Thử Lên Discord",
+    Callback = function()
+        if not Settings.WebhookURL or Settings.WebhookURL == "" then
+            OrionLib:MakeNotification({
+                Name = "Chưa Có Link Webhook",
+                Content = "Vui lòng nhập đường dẫn Discord Webhook vào ô ở trên trước!",
+                Image = "rbxassetid://4483345998",
+                Time = 4
+            })
+            return
+        end
+
+        local testFields = {
+            { name = "👤 Người chơi", value = LocalPlayer.Name .. " (" .. LocalPlayer.DisplayName .. ")", inline = true },
+            { name = "🆔 User ID", value = tostring(LocalPlayer.UserId), inline = true },
+            { name = "🎮 Place ID", value = tostring(game.PlaceId), inline = true },
+            { name = "⚡ Kill Aura", value = Settings.KillAura and "🟢 Bật (All Maps)" or "🔴 Tắt", inline = true },
+            { name = "👑 Auto Play", value = Settings.AutoPlay and "🟢 Đang Bật" or "🔴 Tắt", inline = true },
+            { name = "🔄 Auto Rejoin", value = Settings.AutoRejoin and "🟢 Đang Bật" or "🔴 Tắt", inline = true }
+        }
+
+        SendDiscordWebhook(
+            "🔔 [TEST THÀNH CÔNG] Anime Dimensions Hub Webhook",
+            "Discord Webhook đã kết nối và gửi thông báo thành công từ Executor của bạn!",
+            testFields,
+            65280
+        )
+
+        OrionLib:MakeNotification({
+            Name = "Thành Công!",
+            Content = "Đã gửi thông báo test tới kênh Discord!",
+            Image = "rbxassetid://4483345998",
+            Time = 4
+        })
+    end
+})
+
+-- ===================================================================
 -- 🔄 LOGIC CORE CHẠY NGẦM ĐẦY ĐỦ (COMPLETE EXECUTION ENGINES)
 -- ===================================================================
 
@@ -615,6 +747,19 @@ local function TriggerRejoin()
     if not Settings.AutoRejoin then return end
     warn("⚠️ [PHÁT HIỆN BỊ KICK / MẤT MẠNG! ĐANG TỰ ĐỘNG REJOIN...]")
     
+    if Settings.WebhookEnabled and Settings.WebhookOnRejoin then
+        SendDiscordWebhook(
+            "⚠️ [CẢNH BÁO] Tài Khoản Bị Kick / Rejoin",
+            "Tài khoản **" .. LocalPlayer.Name .. "** vừa mất kết nối khỏi server và đang tự động Rejoin!",
+            {
+                { name = "👤 Người chơi", value = LocalPlayer.Name, inline = true },
+                { name = "⏱️ Thời gian", value = os.date("%H:%M:%S - %d/%m/%Y"), inline = true },
+                { name = "🎮 Place ID", value = tostring(game.PlaceId), inline = false }
+            },
+            15158332
+        )
+    end
+
     local queue = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
     if queue then
         pcall(function()
@@ -776,6 +921,7 @@ task.spawn(function()
 end)
 
 -- 7. VÒNG LẶP AUTO REPLAY & KIỂM TRA RAID OPEN
+local lastWebhookClearTime = 0
 task.spawn(function()
     while task.wait(1.5) do
         local isRaidOpen = false
@@ -806,7 +952,23 @@ task.spawn(function()
                 local replayRemote = ReplicatedStorage:FindFirstChild("ReplayVote", true) 
                     or ReplicatedStorage:FindFirstChild("VoteReplay", true)
                     or ReplicatedStorage:FindFirstChild("Replay", true)
-                if replayRemote then replayRemote:FireServer(true) end
+                if replayRemote then 
+                    replayRemote:FireServer(true)
+                    
+                    if Settings.WebhookEnabled and Settings.WebhookOnClear and (tick() - lastWebhookClearTime > 15) then
+                        lastWebhookClearTime = tick()
+                        SendDiscordWebhook(
+                            "🏆 [CLEAR MAP] Hoàn Thành Màn Chơi!",
+                            "Tài khoản **" .. LocalPlayer.Name .. "** đã hoàn thành màn chơi / Dungeon / Raid thành công!",
+                            {
+                                { name = "👤 Người chơi", value = LocalPlayer.Name, inline = true },
+                                { name = "⏱️ Giờ hoàn thành", value = os.date("%H:%M:%S"), inline = true },
+                                { name = "🔄 Auto Replay", value = "Đã tự động gửi yêu cầu chơi lại", inline = true }
+                            },
+                            3066993
+                        )
+                    end
+                end
             end)
         end
     end
