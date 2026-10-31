@@ -542,6 +542,7 @@ MoreTab:AddButton({
                 or ReplicatedStorage:FindFirstChild("ReturnLobby", true)
             if remote then remote:FireServer() end
         end)
+        TeleportService:Teleport(6379034480, LocalPlayer)
     end
 })
 
@@ -1281,16 +1282,104 @@ pcall(function()
     end
 end)
 
--- 2. HÀM TÌM QUÁI HOẶC BOSS TỐI ƯU
+-- ===================================================================
+-- 🔄 LOGIC CORE CHẠY NGẦM ĐẦY ĐỦ (COMPLETE EXECUTION ENGINES)
+-- ===================================================================
+
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+-- HÀM MÔ PHỎNG CLICK CHUỘT THẬT (ĐẢM BẢO 100% LUÔN ĐÁNH ĐƯỢC MỌI GAME)
+local function SimulateLeftClick()
+    pcall(function()
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+        task.wait(0.01)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    end)
+    pcall(function()
+        VirtualUser:Button1Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(0.01)
+        VirtualUser:Button1Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end)
+    pcall(function()
+        if mouse1click then mouse1click() end
+    end)
+end
+
+-- HÀM MÔ PHỎNG BẤM PHÍM SKILL (1, 2, 3, 4, 5)
+local keyMap = {
+    ["1"] = Enum.KeyCode.One,
+    ["2"] = Enum.KeyCode.Two,
+    ["3"] = Enum.KeyCode.Three,
+    ["4"] = Enum.KeyCode.Four,
+    ["5"] = Enum.KeyCode.Five
+}
+
+local function SimulateSkillKey(numStr)
+    local kc = keyMap[tostring(numStr)]
+    if kc then
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, kc, false, game)
+            task.wait(0.02)
+            VirtualInputManager:SendKeyEvent(false, kc, false, game)
+        end)
+    end
+end
+
+-- HÀM TÌM TẤT CẢ QUÁI / BOSS TOÀN DIỆN (QUÉT MỌI NƠI TRONG WORKSPACE)
+local function GetAllEnemies()
+    local list = {}
+    local seen = {}
+
+    local function CheckModel(model)
+        if not model or not model:IsA("Model") or model == Character or seen[model] then return end
+        if Players:GetPlayerFromCharacter(model) then return end
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso")
+        if hum and root and hum.Health > 0 then
+            seen[model] = true
+            table.insert(list, model)
+        end
+    end
+
+    -- 1. Quét các thư mục phổ biến
+    local candidateFolders = {
+        workspace:FindFirstChild("Enemies"),
+        workspace:FindFirstChild("Mobs"),
+        workspace:FindFirstChild("Monsters"),
+        workspace:FindFirstChild("Entities"),
+        workspace:FindFirstChild("Dungeon") and workspace.Dungeon:FindFirstChild("Enemies"),
+        workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Enemies"),
+        workspace:FindFirstChild("CurrentRoom") and workspace.CurrentRoom:FindFirstChild("Enemies"),
+        workspace:FindFirstChild("Folder")
+    }
+
+    for _, folder in ipairs(candidateFolders) do
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                CheckModel(child)
+            end
+        end
+    end
+
+    -- 2. Quét trực tiếp trong Workspace nếu chưa tìm thấy
+    if #list == 0 then
+        for _, child in ipairs(workspace:GetChildren()) do
+            CheckModel(child)
+        end
+    end
+
+    return list
+end
+
+-- HÀM LẤY MỤC TIÊU ƯU TIÊN GẦN NHẤT HOẶC BOSS
 local function GetTarget()
-    local mobsFolder = workspace:FindFirstChild("Mobs") or workspace:FindFirstChild("Enemies") or workspace:FindFirstChild("Monsters")
-    if not mobsFolder then return nil end
+    local enemies = GetAllEnemies()
+    if #enemies == 0 then return nil end
 
     if Settings.AutoWalkOnlyBoss then
-        for _, mob in pairs(mobsFolder:GetChildren()) do
-            local hum = mob:FindFirstChild("Humanoid")
-            local root = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChild("Torso")
-            if hum and root and hum.Health > 0 and (mob.Name:find("Boss") or mob:FindFirstChild("BossLabel") or hum.MaxHealth > 50000) then
+        for _, mob in ipairs(enemies) do
+            local hum = mob:FindFirstChildOfClass("Humanoid")
+            if mob.Name:lower():find("boss") or mob:FindFirstChild("BossLabel") or (hum and hum.MaxHealth > 50000) then
                 return mob
             end
         end
@@ -1298,10 +1387,9 @@ local function GetTarget()
 
     local closestMob = nil
     local minDistance = math.huge
-    for _, mob in pairs(mobsFolder:GetChildren()) do
-        local hum = mob:FindFirstChild("Humanoid")
-        local root = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChild("Torso")
-        if hum and root and hum.Health > 0 and HumanoidRootPart then
+    for _, mob in ipairs(enemies) do
+        local root = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChild("Torso") or mob:FindFirstChild("UpperTorso")
+        if root and HumanoidRootPart then
             local dist = (HumanoidRootPart.Position - root.Position).Magnitude
             if dist < minDistance then
                 minDistance = dist
@@ -1312,52 +1400,45 @@ local function GetTarget()
     return closestMob
 end
 
--- 3. VÒNG LẶP FARM CHÍNH (TWEEN / BAY ĐẾN QUÁI & ĐÁNH)
-task.spawn(function()
-    while task.wait(0.05) do
-        if Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1 then
-            -- Pause if other players are present
-        elseif (Settings.AutoMob or Settings.AutoPlay) and Humanoid and Humanoid.Health > 0 and HumanoidRootPart then
-            local target = GetTarget()
-            if target and target:FindFirstChild("HumanoidRootPart") then
-                local targetCFrame = target.HumanoidRootPart.CFrame
-                local offset = (Settings.FarmPosition == "Above") 
-                    and (CFrame.new(0, Settings.FarmDistance, 0) * CFrame.Angles(math.rad(-90), 0, 0))
-                    or CFrame.new(0, 0, Settings.FarmDistance)
-
-                HumanoidRootPart.CFrame = targetCFrame * offset
-
-                if Settings.AutoMelee or Settings.SelectAttackMethod == "Melee" or Settings.SelectAttackMethod == "Click" then
-                    pcall(function()
-                        local combatRemote = ReplicatedStorage:FindFirstChild("Attack", true) 
-                            or ReplicatedStorage:FindFirstChild("MeleeAttack", true) 
-                            or ReplicatedStorage:FindFirstChild("Combat", true)
-                            or ReplicatedStorage:FindFirstChild("Punch", true)
-                        if combatRemote then combatRemote:FireServer() end
-                    end)
-                end
+-- VÒNG LẶP NOCLIP LIÊN TỤC TRÁNH KẸT VÀ RƠI
+RunService.Stepped:Connect(function()
+    if Character and (Settings.AutoMob or Settings.AutoPlay or not Settings.DisableNoclip) then
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
             end
         end
     end
 end)
 
--- 4. VÒNG LẶP KILL AURA (QUÉT TOÀN BỘ MỌI MAP)
+-- 3. VÒNG LẶP FARM CHÍNH (BAY ĐẾN QUÁI & ĐÁNH THẬT + TWEEN + CHỐNG RƠI)
 task.spawn(function()
-    while task.wait(0.15) do
-        if Settings.KillAura and Humanoid and Humanoid.Health > 0 then
-            local mobsFolder = workspace:FindFirstChild("Mobs") or workspace:FindFirstChild("Enemies") or workspace:FindFirstChild("Monsters")
-            if mobsFolder then
-                for _, mob in pairs(mobsFolder:GetChildren()) do
-                    local mobHum = mob:FindFirstChild("Humanoid")
-                    local mobRoot = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChild("Torso")
-                    if mobHum and mobHum.Health > 0 and mobRoot then
+    while task.wait(0.03) do
+        if Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1 then
+            -- Pause if other players are present
+        elseif (Settings.AutoMob or Settings.AutoPlay) and Humanoid and Humanoid.Health > 0 and HumanoidRootPart then
+            local target = GetTarget()
+            if target then
+                local targetRoot = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Torso") or target:FindFirstChild("UpperTorso")
+                if targetRoot then
+                    local targetCFrame = targetRoot.CFrame
+                    local offset = (Settings.FarmPosition == "Above") 
+                        and (CFrame.new(0, Settings.FarmDistance or 7, 0) * CFrame.Angles(math.rad(-90), 0, 0))
+                        or CFrame.new(0, 0, Settings.FarmDistance or 7)
+
+                    HumanoidRootPart.CFrame = targetCFrame * offset
+                    HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+                    HumanoidRootPart.RotVelocity = Vector3.new(0, 0, 0)
+
+                    if Settings.AutoMelee or Settings.SelectAttackMethod == "Melee" or Settings.SelectAttackMethod == "Click" then
+                        SimulateLeftClick()
+
                         pcall(function()
-                            local damageRemote = ReplicatedStorage:FindFirstChild("Damage", true)
-                                or ReplicatedStorage:FindFirstChild("HitMonster", true)
-                                or ReplicatedStorage:FindFirstChild("Attack", true)
-                            if damageRemote then
-                                damageRemote:FireServer(mob, mobRoot.Position)
-                            end
+                            local combatRemote = ReplicatedStorage:FindFirstChild("Attack", true) 
+                                or ReplicatedStorage:FindFirstChild("MeleeAttack", true) 
+                                or ReplicatedStorage:FindFirstChild("Combat", true)
+                                or ReplicatedStorage:FindFirstChild("Punch", true)
+                            if combatRemote then combatRemote:FireServer() end
                         end)
                     end
                 end
@@ -1366,12 +1447,39 @@ task.spawn(function()
     end
 end)
 
--- 5. VÒNG LẶP AUTO SKILL THEO THỨ TỰ ƯU TIÊN (SKILL PRIORITY 1-5)
+-- 4. VÒNG LẶP KILL AURA (QUÉT TOÀN BỘ WORKSPACE & TẤT CẢ QUÁI)
 task.spawn(function()
-    while task.wait(0.3) do
+    while task.wait(0.12) do
+        if Settings.KillAura and Humanoid and Humanoid.Health > 0 then
+            local enemies = GetAllEnemies()
+            for _, mob in ipairs(enemies) do
+                local mobRoot = mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChild("Torso") or mob:FindFirstChild("UpperTorso")
+                if mobRoot then
+                    pcall(function()
+                        local damageRemote = ReplicatedStorage:FindFirstChild("Damage", true)
+                            or ReplicatedStorage:FindFirstChild("HitMonster", true)
+                            or ReplicatedStorage:FindFirstChild("Attack", true)
+                            or ReplicatedStorage:FindFirstChild("Combat", true)
+                        if damageRemote then
+                            damageRemote:FireServer(mob, mobRoot.Position)
+                        end
+                    end)
+                end
+            end
+            if #enemies > 0 then
+                SimulateLeftClick()
+            end
+        end
+    end
+end)
+
+-- 5. VÒNG LẶP AUTO SKILL (MÔ PHỎNG PHÍM 1-5 & THỨ TỰ ƯU TIÊN + REMOTES)
+task.spawn(function()
+    while task.wait(0.25) do
         if (Settings.AutoSkill or Settings.AutoPlay) and Humanoid and Humanoid.Health > 0 then
             local skillOrder = { Settings.SkillFirst, Settings.SkillSecond, Settings.SkillThird, Settings.SkillFourth, Settings.SkillFifth }
             for _, skillNum in ipairs(skillOrder) do
+                SimulateSkillKey(skillNum)
                 pcall(function()
                     local skillRemote = ReplicatedStorage:FindFirstChild("UseSkill", true) 
                         or ReplicatedStorage:FindFirstChild("SkillRemote", true)
@@ -1380,7 +1488,7 @@ task.spawn(function()
                         skillRemote:FireServer(tonumber(skillNum) or 1)
                     end
                 end)
-                task.wait(0.05)
+                task.wait(0.04)
             end
 
             if Settings.AutoAssistSkill or Settings.AutoPlay then
@@ -1458,7 +1566,7 @@ task.spawn(function()
             end)
         end
 
-        -- Auto Replay
+        -- Auto Replay (HỖ TRỢ CẢ REMOTE LẪN CLICK NÚT TRÊN MÀN HÌNH)
         if Settings.AutoReplay and not (isRaidOpen and Settings.StopReplayIfRaidOpen) then
             pcall(function()
                 local replayRemote = ReplicatedStorage:FindFirstChild("ReplayVote", true) 
@@ -1466,22 +1574,33 @@ task.spawn(function()
                     or ReplicatedStorage:FindFirstChild("Replay", true)
                 if replayRemote then 
                     replayRemote:FireServer(true)
-                    
-                    if Settings.SendDimensionDrops and (tick() - lastWebhookClearTime > 15) then
-                        lastWebhookClearTime = tick()
-                        SendDiscordWebhook(
-                            "🏆 [CLEAR MAP] Match Cleared!",
-                            "Player **" .. LocalPlayer.Name .. "** cleared the stage successfully!",
-                            {
-                                { name = "Player", value = LocalPlayer.Name, inline = true },
-                                { name = "Time", value = os.date("%H:%M:%S"), inline = true },
-                                { name = "Auto Replay", value = "Requested", inline = true }
-                            },
-                            3066993
-                        )
+                end
+            end)
+
+            pcall(function()
+                for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+                    if gui:IsA("TextButton") and (gui.Name:lower():find("replay") or gui.Text:lower():find("replay") or gui.Name:lower():find("retry")) then
+                        if getconnections then
+                            for _, conn in pairs(getconnections(gui.MouseButton1Click) or {}) do conn:Fire() end
+                            for _, conn in pairs(getconnections(gui.Activated) or {}) do conn:Fire() end
+                        end
                     end
                 end
             end)
+
+            if Settings.SendDimensionDrops and (tick() - lastWebhookClearTime > 15) then
+                lastWebhookClearTime = tick()
+                SendDiscordWebhook(
+                    "🏆 [CLEAR MAP] Match Cleared!",
+                    "Player **" .. LocalPlayer.Name .. "** cleared the stage successfully!",
+                    {
+                        { name = "Player", value = LocalPlayer.Name, inline = true },
+                        { name = "Time", value = os.date("%H:%M:%S"), inline = true },
+                        { name = "Auto Replay", value = "Requested", inline = true }
+                    },
+                    3066993
+                )
+            end
         end
     end
 end)
