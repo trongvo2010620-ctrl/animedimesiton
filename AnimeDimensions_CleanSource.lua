@@ -545,11 +545,6 @@ task.spawn(function()
             task.wait(0.2)
             VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
         end)
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-            task.wait(0.1)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-        end)
     end))
 end)
 
@@ -601,55 +596,75 @@ end
 -- 3. LOAD GIAO DIỆN CHÍNH (ORION UI - TỐI ƯU HÓA CDN & ĐA PHƯƠNG THỨC MẠNG)
 -- ===================================================================
 local OrionLib;
-local orionMirrors = {
-    "https://cdn.jsdelivr.net/gh/jensonhirst/Orion@main/source",
-    "https://fastly.jsdelivr.net/gh/jensonhirst/Orion@main/source",
-    "https://gcore.jsdelivr.net/gh/jensonhirst/Orion@main/source",
-    "https://raw.githubusercontent.com/jensonhirst/Orion/main/source",
-    "https://raw.githubusercontent.com/shlexware/Orion/main/source"
-}
-
-local function FetchUrl(url)
-    local body = nil
-    -- Phương thức 1: game:HttpGet
+local orionCacheFile = "VHT_Orion_Cache.lua"
+if readfile and isfile and isfile(orionCacheFile) then
     pcall(function()
-        body = game:HttpGet(url)
-    end)
-    if body and type(body) == "string" and #body > 1000 and not body:find("404: Not Found") then
-        return body
-    end
-
-    -- Phương thức 2: request / http_request / syn.request
-    local req = (syn and syn.request) or (http and http.request) or http_request or request
-    if req then
-        pcall(function()
-            local res = req({ Url = url, Method = "GET" })
-            if res and res.Body and #res.Body > 1000 and not res.Body:find("404: Not Found") then
-                body = res.Body
+        local cachedCode = readfile(orionCacheFile)
+        if cachedCode and #cachedCode > 1000 then
+            local fn = loadstring(cachedCode)
+            if fn then
+                local res = fn()
+                if type(res) == "table" and res.MakeWindow then
+                    OrionLib = res
+                end
             end
-        end)
-    end
-    if body and type(body) == "string" and #body > 1000 and not body:find("404: Not Found") then
-        return body
-    end
-
-    -- Phương thức 3: game:HttpGetAsync
-    pcall(function()
-        body = game:HttpGetAsync(url)
+        end
     end)
-    if body and type(body) == "string" and #body > 1000 and not body:find("404: Not Found") then
-        return body
-    end
-
-    return nil
 end
 
-for _, mirror in ipairs(orionMirrors) do
-    local code = FetchUrl(mirror)
-    if code then
-        local s, res = pcall(function()
-            -- 1. Sửa đoạn gán Parent an toàn 100% không bao giờ văng lỗi Permission / Identity trên Solara / Mobile
-            code = code:gsub("if syn then%s+syn%.protect_gui%(Orion%)%s+Orion%.Parent = game%.CoreGui%s+else%s+Orion%.Parent = gethui%(%) or game%.CoreGui%s+end", [=[
+if not OrionLib then
+    local orionMirrors = {
+        "https://raw.githubusercontent.com/jensonhirst/Orion/main/source",
+        "https://raw.githack.com/jensonhirst/Orion/main/source",
+        "https://cdn.jsdelivr.net/gh/jensonhirst/Orion@main/source",
+        "https://fastly.jsdelivr.net/gh/jensonhirst/Orion@main/source",
+        "https://cdn.statically.io/gh/jensonhirst/Orion/main/source"
+    }
+
+    local function FetchUrl(url)
+        local body = nil
+        -- Phương thức 1: game:HttpGet
+        pcall(function()
+            body = game:HttpGet(url)
+        end)
+        if body and type(body) == "string" and #body > 1000 and not body:find("404: Not Found") and not body:find("<!DOCTYPE") then
+            return body
+        end
+
+        -- Phương thức 2: request / http_request / syn.request
+        local req = (syn and syn.request) or (http and http.request) or http_request or request
+        if req then
+            pcall(function()
+                local res = req({ Url = url, Method = "GET" })
+                if res and res.Body and #res.Body > 1000 and not res.Body:find("404: Not Found") and not res.Body:find("<!DOCTYPE") then
+                    body = res.Body
+                end
+            end)
+        end
+        if body and type(body) == "string" and #body > 1000 and not body:find("404: Not Found") and not body:find("<!DOCTYPE") then
+            return body
+        end
+
+        -- Phương thức 3: game:HttpGetAsync
+        pcall(function()
+            body = game:HttpGetAsync(url)
+        end)
+        if body and type(body) == "string" and #body > 1000 and not body:find("404: Not Found") and not body:find("<!DOCTYPE") then
+            return body
+        end
+
+        return nil
+    end
+
+    for _, mirror in ipairs(orionMirrors) do
+        local code = FetchUrl(mirror)
+        if code then
+            local s, res = pcall(function()
+                -- Đảm bảo ResetOnSpawn = false để không bị mất GUI khi chết / chuyển map
+                code = code:gsub('Orion%.Name%s*=%s*"Orion"', 'Orion.Name = "Orion"\nOrion.ResetOnSpawn = false')
+
+                -- 1. Sửa đoạn gán Parent an toàn 100% không bao giờ văng lỗi Permission / Identity trên Solara / Mobile
+                code = code:gsub("if syn then%s+syn%.protect_gui%(Orion%)%s+Orion%.Parent = game%.CoreGui%s+else%s+Orion%.Parent = gethui%(%) or game%.CoreGui%s+end", [=[
 local safeParent = nil
 if gethui then pcall(function() safeParent = gethui() end) end
 if not safeParent then
@@ -667,32 +682,50 @@ if not safeParent or Orion.Parent ~= safeParent then
 end
 ]=])
 
-            -- 2. Sửa IsRunning để luôn nhận diện đúng khi ScreenGui ở PlayerGui hay CoreGui hay gethui
-            code = code:gsub("function OrionLib:IsRunning%(%).-end%s+end", [=[
+                -- 2. Sửa IsRunning để luôn nhận diện đúng khi ScreenGui ở PlayerGui hay CoreGui hay gethui
+                code = code:gsub("function OrionLib:IsRunning%(%).-end%s+end", [=[
 function OrionLib:IsRunning()
     return Orion and Orion.Parent ~= nil
 end
 ]=])
 
-            -- 3. Sửa vòng lặp dọn dẹp ScreenGui cũ an toàn
-            code = code:gsub("for _, Interface in ipairs%(game%.CoreGui:GetChildren%(%)%) do", "for _, Interface in ipairs(((pcall(function() return game:GetService('CoreGui'):GetChildren() end) and game:GetService('CoreGui'):GetChildren()) or (game:GetService('Players').LocalPlayer:FindFirstChild('PlayerGui') and game:GetService('Players').LocalPlayer.PlayerGui:GetChildren()) or {})) do")
+                -- 3. Sửa vòng lặp dọn dẹp ScreenGui cũ an toàn
+                code = code:gsub("for _, Interface in ipairs%(game%.CoreGui:GetChildren%(%)%) do", "for _, Interface in ipairs(((pcall(function() return game:GetService('CoreGui'):GetChildren() end) and game:GetService('CoreGui'):GetChildren()) or (game:GetService('Players').LocalPlayer:FindFirstChild('PlayerGui') and game:GetService('Players').LocalPlayer.PlayerGui:GetChildren()) or {})) do")
 
-            -- 4. Vô hiệu hóa Sirius reporter telemetry tránh nghẽn mạng / văng lỗi cú pháp
-            code = code:gsub("https://raw%.githubusercontent%.com/SiriusSoftwareLtd/[^\"]+", "")
-            code = code:gsub("%(game %:%: any%)%.HttpGet", "pcall")
-            code = code:gsub("%:%: any", "")
+                -- 4. Vô hiệu hóa Sirius reporter telemetry tránh nghẽn mạng / văng lỗi cú pháp
+                code = code:gsub("https://raw%.githubusercontent%.com/SiriusSoftwareLtd/[^\"]+", "")
+                code = code:gsub("%(game %:%: any%)%.HttpGet", "pcall")
+                code = code:gsub("%:%: any", "")
 
-            return loadstring(code)()
-        end)
+                local fn = loadstring(code)
+                if fn then
+                    local lib = fn()
+                    if type(lib) == "table" and lib.MakeWindow then
+                        pcall(function()
+                            if writefile then writefile(orionCacheFile, code) end
+                        end)
+                        return lib
+                    end
+                end
+                return nil
+            end)
 
-        if s and res and type(res) == "table" and res.MakeWindow then
-            OrionLib = res
-            break
+            if s and res and type(res) == "table" and res.MakeWindow then
+                OrionLib = res
+                break
+            end
         end
     end
 end
 
 if not OrionLib then
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "VHT HUB LỖI",
+            Text = "Không thể tải Orion UI do mạng/chặn CDN! Vui lòng bật 1.1.1.1 (VPN) rồi thử lại.",
+            Duration = 10
+        })
+    end)
     warn("❌ Không thể tải thư viện Orion UI!")
     return
 end
@@ -2530,11 +2563,27 @@ end)
 -- 🔄 LOGIC CORE CHẠY NGẦM ĐẦY ĐỦ (COMPLETE EXECUTION ENGINES)
 -- ===================================================================
 
+local cachedSkillRemote = nil
+local cachedAssistRemote = nil
+local cachedFruitRemote = nil
+
+local function CheckInGame()
+    if game.PlaceId == LOBBY_PLACE_ID then return false end
+    if workspace:FindFirstChild("Dungeon") ~= nil then return true end
+    if workspace:FindFirstChild("Enemies") ~= nil then return true end
+    if LocalPlayer.PlayerGui:FindFirstChild("DungeonUI", true) ~= nil then return true end
+    if LocalPlayer.PlayerGui:FindFirstChild("Wave", true) ~= nil or LocalPlayer.PlayerGui:FindFirstChild("WaveLabel", true) ~= nil then return true end
+    if LocalPlayer.PlayerGui:FindFirstChild("StageTimer", true) ~= nil then return true end
+    return game.PlaceId ~= LOBBY_PLACE_ID
+end
+
 -- HÀM MÔ PHỎNG CLICK CHUỘT THẬT (TỰ ĐỘNG CHỌN 1 PHƯƠNG THỨC TỐI ƯU NHẤT TRÁNH NHÂN ĐÔI CLICK & TỰ ĐỘNG RE-TEST)
 local preferredClickMethod = nil
 local lastClickMethodTest = 0
 
 local function SimulateLeftClick()
+    if not CheckInGame() then return end
+    if UserInputService:GetFocusedTextBox() then return end
     local now = os.clock()
     if now - lastClickMethodTest > 60 then
         preferredClickMethod = nil
@@ -2602,77 +2651,48 @@ local keyMap = {
     ["5"] = Enum.KeyCode.Five
 }
 
-local cachedSkillRemote = nil
-local cachedAssistRemote = nil
-local cachedFruitRemote = nil
-
 local function SimulateSkillKey(numStr)
+    if not CheckInGame() then return end
+    if UserInputService:GetFocusedTextBox() then return end
     local kc = keyMap[tostring(numStr)]
-    if kc then
-        local fired = false
+    if kc and VirtualInputManager and VirtualInputManager.SendKeyEvent then
         pcall(function()
-            if VirtualInputManager and VirtualInputManager.SendKeyEvent then
-                VirtualInputManager:SendKeyEvent(true, kc, false, game)
-                task.delay(0.015, function()
-                    pcall(function() VirtualInputManager:SendKeyEvent(false, kc, false, game) end)
-                end)
-                fired = true
-            end
+            VirtualInputManager:SendKeyEvent(true, kc, false, game)
+            VirtualInputManager:SendKeyEvent(false, kc, false, game)
         end)
-        -- Chỉ kích hoạt keypress dự phòng nếu VIM thất bại (CRIT-1: tránh double-fire)
-        if not fired then
-            pcall(function()
-                if keypress and keyrelease then
-                    keypress(kc.Value)
-                    task.delay(0.015, function()
-                        pcall(function() keyrelease(kc.Value) end)
-                    end)
-                    fired = true
-                end
-            end)
-        end
-        if not fired and VirtualUser then
-            pcall(function()
-                VirtualUser:CaptureController()
-            end)
-        end
     end
 end
 
 -- KÍCH HOẠT SKILL PHỤ (ASSIST SKILL - ƯU TIÊN REMOTE, CHỈ DÙNG PHÍM E KHI KHÔNG CÓ REMOTE) (B1, B5)
 local function UseAssistSkill()
+    if not CheckInGame() then return end
     local remote = FindRemote({"UseAssistSkill", "AssistSkill", "UseAssist", "Assist"})
-    local sentRemote = false
     if remote then
-        sentRemote = SafeFireRemote(remote)
+        SafeFireRemote(remote)
+        return
     end
-    if not sentRemote then
+    if UserInputService:GetFocusedTextBox() then return end
+    if VirtualInputManager and VirtualInputManager.SendKeyEvent then
         pcall(function()
-            if VirtualInputManager and VirtualInputManager.SendKeyEvent then
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                task.delay(0.015, function()
-                    pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
-                end)
-            end
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
         end)
     end
 end
 
 -- KÍCH HOẠT FRUIT SKILL (ƯU TIÊN REMOTE, CHỈ DÙNG PHÍM F KHI KHÔNG CÓ REMOTE) (B1, B5)
 local function UseFruitSkill()
+    if not CheckInGame() then return end
     local remote = FindRemote({"UseFruitSkill", "FruitSkill", "UseFruit", "Fruit"})
-    local sentRemote = false
     if remote then
-        sentRemote = SafeFireRemote(remote)
+        SafeFireRemote(remote)
+        return
     end
-    if not sentRemote then
+    if UserInputService:GetFocusedTextBox() then return end
+    if VirtualInputManager and VirtualInputManager.SendKeyEvent then
         pcall(function()
-            if VirtualInputManager and VirtualInputManager.SendKeyEvent then
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-                task.delay(0.015, function()
-                    pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game) end)
-                end)
-            end
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
         end)
     end
 end
@@ -2702,6 +2722,7 @@ local cachedEnemies = {}
 local lastEnemyScan = 0
 
 local function GetAllEnemies(forceRefresh)
+    if not CheckInGame() then return {} end
     local now = os.clock()
     if not forceRefresh and (now - lastEnemyScan < 0.35) then
         if #cachedEnemies == 0 then
@@ -2871,6 +2892,16 @@ task.spawn(function()
             break
         end
 
+        if not CheckInGame() then
+            if activeFarmTween then activeFarmTween:Cancel(); activeFarmTween = nil end
+            local myRoot = GetMyRoot()
+            if myRoot then
+                local bv = myRoot:FindFirstChild("FarmBV")
+                if bv then bv:Destroy() end
+            end
+            continue
+        end
+
         local hasOtherPlayers = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
         if not hasOtherPlayers and (Settings.AutoMob or Settings.AutoPlay) then
             local char = GetMyChar()
@@ -2979,6 +3010,7 @@ local lastKillAuraSkillTime = 0
 task.spawn(function()
     while task.wait(0.15) do
         if _G.VHT_SessionID ~= currentSessionID then break end
+        if not CheckInGame() then continue end
         local hasOtherPlayers = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
         if not hasOtherPlayers and Settings.KillAura then
             local attackMethod = Settings.SelectAttackMethod or "Click"
@@ -2986,14 +3018,21 @@ task.spawn(function()
             if #enemies > 0 then
                 if attackMethod ~= "Skill" then
                     SimulateLeftClick()
-                elseif not Settings.AutoSkill then
-                    -- AttackMethod là Skill và AutoSkill tắt -> Kích hoạt 1 skill ngẫu nhiên với nhịp an toàn 2.0s (HIGH-5, MED-4)
+                elseif Settings.AutoSkill then
+                    -- AttackMethod là Skill và AutoSkill bật -> Kích hoạt 1 skill ngẫu nhiên với nhịp an toàn 2.0s
                     local now = os.clock()
                     if now - lastKillAuraSkillTime >= 2.0 then
                         lastKillAuraSkillTime = now
                         local skills = { Settings.SkillFirst, Settings.SkillSecond, Settings.SkillThird, Settings.SkillFourth, Settings.SkillFifth }
                         local chosenSkill = skills[math.random(1, #skills)] or 1
-                        SimulateSkillKey(chosenSkill)
+                        local skillRemote = cachedSkillRemote or FindRemote({"UseSkill", "SkillRemote", "Skill"})
+                        local ok = false
+                        if skillRemote then
+                            ok = SafeFireRemote(skillRemote, tonumber(chosenSkill) or 1)
+                        end
+                        if not ok then
+                            SimulateSkillKey(chosenSkill)
+                        end
                     end
                 end
             end
@@ -3003,17 +3042,17 @@ end)
 
 -- 5. VÒNG LẶP AUTO SKILL (MÔ PHỎNG PHÍM 1-5 & THỨ TỰ ƯU TIÊN + REMOTES + KHOẢNG CÁCH DISTANCETOSKILL)
 task.spawn(function()
-    while task.wait(0.08) do
-        if _G.VHT_SessionID ~= currentSessionID then break end -- Tối ưu tốc độ vòng lặp từ 0.25s xuống 0.08s (spam cực nhanh, nhạy bén)
+    while task.wait(0.1) do
+        if _G.VHT_SessionID ~= currentSessionID then break end
+        if not CheckInGame() then continue end
         local hasOther = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
+        if hasOther then continue end
+        if not (Settings.AutoSkill or Settings.AutoPlay) then continue end
+
         local myHum = GetMyHumanoid()
         local myRoot = GetMyRoot()
 
-        local attackMethod = Settings.SelectAttackMethod or "Click"
-        local allowSkill = (attackMethod ~= "Melee") and (Settings.AutoSkill or Settings.AutoPlay or attackMethod == "Skill")
-
-        -- Cho phép skill hoạt động khi chọn SelectAttackMethod = "Skill" (CRIT-2)
-        if not hasOther and allowSkill and myHum and myHum.Health > 0 and myRoot then
+        if myHum and myHum.Health > 0 and myRoot then
             local target = GetTarget()
             local inRange = false
             if target and target.root then
@@ -3034,7 +3073,7 @@ task.spawn(function()
                 }
 
                 for _, skillNum in ipairs(skillOrder) do
-                    SimulateSkillKey(skillNum)
+                    local castViaRemote = false
                     pcall(function()
                         local skillRemote = cachedSkillRemote
                         if not skillRemote or not skillRemote.Parent then
@@ -3042,22 +3081,25 @@ task.spawn(function()
                             skillRemote = cachedSkillRemote
                         end
                         if skillRemote then
-                            SafeFireRemote(skillRemote, tonumber(skillNum) or 1)
+                            castViaRemote = SafeFireRemote(skillRemote, tonumber(skillNum) or 1)
                         end
                     end)
-                    task.wait(0.015) -- Nhịp 15ms siêu nhanh và mượt mà giữa các skill
+                    if not castViaRemote then
+                        SimulateSkillKey(skillNum)
+                    end
+                    task.wait(0.02)
                 end
 
                 -- Kế tiếp: Kích hoạt Skill Phụ (Assist Skill)
                 if Settings.AutoAssistSkill or Settings.AutoPlay then
                     UseAssistSkill()
-                    task.wait(0.015)
+                    task.wait(0.02)
                 end
 
                 -- Kế tiếp: Kích hoạt Fruit Skill
                 if Settings.AutoFruitSkill or Settings.AutoPlay then
                     UseFruitSkill()
-                    task.wait(0.015)
+                    task.wait(0.02)
                 end
             end
         end
@@ -3069,6 +3111,7 @@ end)
 task.spawn(function()
     while task.wait(math.max(tonumber(Settings.TweenSpeedDodgePart) or 0.15, 0.05)) do
         if _G.VHT_SessionID ~= currentSessionID then break end
+        if not CheckInGame() then continue end
         if Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1 then
             continue
         end
@@ -3315,15 +3358,6 @@ task.spawn(function()
         end
     end
 end)
-
-local function CheckInGame()
-    if #GetAllEnemies() > 0 then return true end
-    if workspace:FindFirstChild("Dungeon") ~= nil then return true end
-    if LocalPlayer.PlayerGui:FindFirstChild("DungeonUI", true) ~= nil then return true end
-    if LocalPlayer.PlayerGui:FindFirstChild("Wave", true) ~= nil or LocalPlayer.PlayerGui:FindFirstChild("WaveLabel", true) ~= nil then return true end
-    if LocalPlayer.PlayerGui:FindFirstChild("StageTimer", true) ~= nil then return true end
-    return false
-end
 
 -- 8. VÒNG LẶP AUTO BUY (VÉ RAID / TOKEN / METHOD) (B8, B1)
 local buyTimestamps = {}
@@ -4144,6 +4178,14 @@ end
 uiBuilding = false
 if Settings.AutoDeleteMap then task.spawn(function() ApplyAutoDeleteMap(true) end) end
 OrionLib:Init()
+pcall(function()
+    OrionLib:MakeNotification({
+        Name = "VHT HUB",
+        Content = "Giao diện đã sẵn sàng! Nhấn nút VHT hoặc RightShift để đóng/mở.",
+        Image = "rbxassetid://4483345998",
+        Time = 4
+    })
+end)
 print("🎉 VHT HUB - Loaded Successfully with Full 7 Tabs!")
 
 -- ===================================================================
@@ -4160,7 +4202,7 @@ local function EnsureOrionVisible()
                 if g.Name == "Orion" and g:IsA("ScreenGui") then
                     g.Enabled = true
                     for _, child in ipairs(g:GetChildren()) do
-                        if child:IsA("GuiObject") and (child.Name:find("Main", 1, true) or child.Name == "MainWindow") then
+                        if child:IsA("GuiObject") and child.Name ~= "NotificationHolder" then
                             child.Visible = true
                         end
                     end
@@ -4172,7 +4214,8 @@ end
 
 if not Settings.CloseGuiAfterExecute then
     EnsureOrionVisible()
-    task.delay(1, EnsureOrionVisible)
+    task.delay(0.5, EnsureOrionVisible)
+    task.delay(1.5, EnsureOrionVisible)
     task.delay(3, EnsureOrionVisible)
 end
 
@@ -4230,6 +4273,11 @@ pcall(function()
             if c then
                 for _, g in ipairs(c:GetChildren()) do
                     if g.Name == "Orion" and g:IsA("ScreenGui") then
+                        for _, child in ipairs(g:GetChildren()) do
+                            if child:IsA("GuiObject") and child.Name ~= "NotificationHolder" then
+                                return g.Enabled and child.Visible
+                            end
+                        end
                         return g.Enabled
                     end
                 end
@@ -4259,7 +4307,7 @@ pcall(function()
                     if g.Name == "Orion" and g:IsA("ScreenGui") then
                         g.Enabled = isGuiVisible
                         for _, child in ipairs(g:GetChildren()) do
-                            if child:IsA("GuiObject") and (child.Name:find("Main", 1, true) or child.Name == "MainWindow") then
+                            if child:IsA("GuiObject") and child.Name ~= "NotificationHolder" then
                                 child.Visible = isGuiVisible
                             end
                         end
@@ -4311,6 +4359,12 @@ pcall(function()
 
     TrackConnection(toggleBtn.Activated:Connect(function()
         if not hasMoved then
+            ToggleMenu()
+        end
+    end))
+
+    TrackConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and (input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.RightShift) then
             ToggleMenu()
         end
     end))
