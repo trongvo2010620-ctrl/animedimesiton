@@ -1,17 +1,3 @@
---[[
-    ===================================================================
-    🌟 VHT HUB | ANIME DIMENSIONS (OCT 2026 EDITION)
-    Tái hiện 100% đầy đủ toàn bộ giao diện & tính năng từ SLH Hub
-    ⚡ TÍNH NĂNG MỚI BỔ SUNG:
-       - Full 7 Tabs chuẩn SLH: Main, More, Character, Setting, Buy, Webhook, Misc
-       - Infinite Mode Auto Reset theo Wave, Auto Delete Map, Exploit Safety
-       - Skill Priority Sequence (Thứ tự ra chiêu 1->5)
-       - Proximity Prompts, Ctrl+Click TP, Infinite Yield, StatGui
-       - Tự động lưu ngầm 100% (Silent Auto-Save & Auto-Restore)
-       - Auto Rejoin khi Kick / Mất kết nối (Dual Layer)
-    ===================================================================
-]]
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -34,7 +20,8 @@ while not LocalPlayer do
     LocalPlayer = Players.LocalPlayer
 end
 
-local LOBBY_PLACE_ID = 6379034480
+local LOBBY_PLACE_ID = 6938803436
+local ALT_LOBBY_PLACE_ID = 6379034480
 local userIntentionalLeave = false -- Cờ đánh dấu người dùng chủ động Leave, chặn Rejoin tự động (CRIT-1, CRIT-3)
 local currentActiveSlot = 1 -- Quản lý slot nhân vật hiện tại (1: Main, 2: First Assist) tránh spam remote đổi nhân vật
 
@@ -1930,8 +1917,6 @@ local WebhookTab = Window:MakeTab({ Name = T("Webhook"),
 
 WebhookTab:AddSection({ Name = T("Webhook") })
 
-WebhookTab:AddParagraph("----------------------------", "Search in Youtube\n\"How to Create Webhook\"\n----------------------------")
-
 WebhookTab:AddTextbox({ Name = T("Url Webhook"),
     Default = Settings.WebhookURL,
     TextDisappear = false,
@@ -2567,24 +2552,75 @@ local cachedSkillRemote = nil
 local cachedAssistRemote = nil
 local cachedFruitRemote = nil
 
+local function IsLobby()
+    if game.PlaceId == LOBBY_PLACE_ID or game.PlaceId == ALT_LOBBY_PLACE_ID then
+        if workspace:FindFirstChild("Dungeon") ~= nil then return false end
+        local em = workspace:FindFirstChild("Enemies")
+        if em and #em:GetChildren() > 0 then return false end
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if pg and (pg:FindFirstChild("DungeonUI", true) or pg:FindFirstChild("StageTimer", true)) then return false end
+        return true
+    end
+
+    if workspace:FindFirstChild("Lobby") ~= nil then return true end
+    if workspace:FindFirstChild("LobbySpawns") ~= nil then return true end
+    if workspace:FindFirstChild("LobbyElevators") ~= nil then return true end
+    if workspace:FindFirstChild("DungeonElevators") ~= nil then return true end
+    if workspace:FindFirstChild("Elevators") ~= nil then return true end
+    if workspace:FindFirstChild("AFKZone") ~= nil then return true end
+
+    if workspace:FindFirstChild("Dungeon") ~= nil then return false end
+    local em = workspace:FindFirstChild("Enemies")
+    if em and #em:GetChildren() > 0 then return false end
+    if workspace:FindFirstChild("Raid") ~= nil then return false end
+
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if pg then
+        if pg:FindFirstChild("DungeonUI", true) ~= nil then return false end
+        if pg:FindFirstChild("StageTimer", true) ~= nil then return false end
+        local waveGui = pg:FindFirstChild("Wave", true) or pg:FindFirstChild("WaveLabel", true)
+        if waveGui and waveGui:IsA("TextLabel") and waveGui.Text:match("%d+") then return false end
+    end
+
+    return false
+end
+
 local function CheckInGame()
-    if game.PlaceId == LOBBY_PLACE_ID then return false end
+    if IsLobby() then return false end
+
     if workspace:FindFirstChild("Dungeon") ~= nil then return true end
-    if workspace:FindFirstChild("Enemies") ~= nil then return true end
-    if LocalPlayer.PlayerGui:FindFirstChild("DungeonUI", true) ~= nil then return true end
-    if LocalPlayer.PlayerGui:FindFirstChild("Wave", true) ~= nil or LocalPlayer.PlayerGui:FindFirstChild("WaveLabel", true) ~= nil then return true end
-    if LocalPlayer.PlayerGui:FindFirstChild("StageTimer", true) ~= nil then return true end
-    return game.PlaceId ~= LOBBY_PLACE_ID
+    local em = workspace:FindFirstChild("Enemies")
+    if em and #em:GetChildren() > 0 then return true end
+    if workspace:FindFirstChild("Raid") ~= nil then return true end
+
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if pg then
+        if pg:FindFirstChild("DungeonUI", true) ~= nil then return true end
+        if pg:FindFirstChild("StageTimer", true) ~= nil then return true end
+        local waveGui = pg:FindFirstChild("Wave", true) or pg:FindFirstChild("WaveLabel", true)
+        if waveGui and waveGui:IsA("TextLabel") and waveGui.Text:match("%d+") then return true end
+    end
+
+    if game.PlaceId ~= LOBBY_PLACE_ID and game.PlaceId ~= ALT_LOBBY_PLACE_ID and workspace:FindFirstChild("Lobby") == nil then
+        return true
+    end
+
+    return false
 end
 
 -- HÀM MÔ PHỎNG CLICK CHUỘT THẬT (TỰ ĐỘNG CHỌN 1 PHƯƠNG THỨC TỐI ƯU NHẤT TRÁNH NHÂN ĐÔI CLICK & TỰ ĐỘNG RE-TEST)
 local preferredClickMethod = nil
 local lastClickMethodTest = 0
+local lastSimulateClickTick = 0
 
 local function SimulateLeftClick()
-    if not CheckInGame() then return end
+    if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
     local now = os.clock()
+    -- Giảm tốc độ click chậm lại (tối thiểu 280ms mỗi lần click) để tránh lag, kẹt chuột, nghẽn input
+    if now - lastSimulateClickTick < 0.28 then return end
+    lastSimulateClickTick = now
+
     if now - lastClickMethodTest > 60 then
         preferredClickMethod = nil
         lastClickMethodTest = now
@@ -2652,7 +2688,7 @@ local keyMap = {
 }
 
 local function SimulateSkillKey(numStr)
-    if not CheckInGame() then return end
+    if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
     local kc = keyMap[tostring(numStr)]
     if kc and VirtualInputManager and VirtualInputManager.SendKeyEvent then
@@ -2665,8 +2701,8 @@ end
 
 -- KÍCH HOẠT SKILL PHỤ (ASSIST SKILL - ƯU TIÊN REMOTE, CHỈ DÙNG PHÍM E KHI KHÔNG CÓ REMOTE) (B1, B5)
 local function UseAssistSkill()
-    if not CheckInGame() then return end
-    local remote = FindRemote({"UseAssistSkill", "AssistSkill", "UseAssist", "Assist"})
+    if not CheckInGame() or IsLobby() then return end
+    local remote = FindRemote({"UseAssistSkill", "AssistSkill", "UseAssist", "Assist", "AssistRemote"})
     if remote then
         SafeFireRemote(remote)
         return
@@ -2682,8 +2718,8 @@ end
 
 -- KÍCH HOẠT FRUIT SKILL (ƯU TIÊN REMOTE, CHỈ DÙNG PHÍM F KHI KHÔNG CÓ REMOTE) (B1, B5)
 local function UseFruitSkill()
-    if not CheckInGame() then return end
-    local remote = FindRemote({"UseFruitSkill", "FruitSkill", "UseFruit", "Fruit"})
+    if not CheckInGame() or IsLobby() then return end
+    local remote = FindRemote({"UseFruitSkill", "FruitSkill", "UseFruit", "Fruit", "FruitRemote"})
     if remote then
         SafeFireRemote(remote)
         return
@@ -2694,6 +2730,45 @@ local function UseFruitSkill()
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
         end)
+    end
+end
+
+-- HỆ THỐNG TẤN CÔNG THƯỜNG KHÔNG CẦN CLICK CHUỘT (TỰ ĐỘNG DÙNG TOOL & REMOTE, GIẢM TỐC ĐỘ CLICK AN TOÀN)
+local cachedAttackRemote = nil
+local function PerformAttack(target)
+    if not CheckInGame() or IsLobby() then return end
+    if UserInputService:GetFocusedTextBox() then return end
+
+    local attackMethod = Settings.SelectAttackMethod or "Click"
+
+    -- 1. Ưu tiên 1: Tự động chém/đánh bằng Tool.Activate() nếu nhân vật đang cầm vũ khí (100% không cần click chuột)
+    local char = GetMyChar()
+    if char then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            pcall(function() tool:Activate() end)
+        end
+    end
+
+    -- 2. Ưu tiên 2: Tự động gửi Remote tấn công thường của Game (Không chạm vào chuột hay màn hình)
+    local attackRemote = cachedAttackRemote
+    if not attackRemote or not attackRemote.Parent then
+        cachedAttackRemote = FindRemote({"Attack", "BasicAttack", "MeleeAttack", "Slash", "Punch", "LightAttack", "Hit", "Combat", "Damage"})
+        attackRemote = cachedAttackRemote
+    end
+    if attackRemote then
+        pcall(function()
+            if target and target.root then
+                SafeFireRemote(attackRemote, target.model or target.root)
+            else
+                SafeFireRemote(attackRemote)
+            end
+        end)
+    end
+
+    -- 3. Chỉ dự phòng click chuột chậm lại khi attackMethod yêu cầu Click/Melee
+    if attackMethod == "Click" or attackMethod == "Melee" then
+        SimulateLeftClick()
     end
 end
 
@@ -2722,7 +2797,7 @@ local cachedEnemies = {}
 local lastEnemyScan = 0
 
 local function GetAllEnemies(forceRefresh)
-    if not CheckInGame() then return {} end
+    if not CheckInGame() or IsLobby() then return {} end
     local now = os.clock()
     if not forceRefresh and (now - lastEnemyScan < 0.35) then
         if #cachedEnemies == 0 then
@@ -2749,6 +2824,10 @@ local function GetAllEnemies(forceRefresh)
     local function Inspect(model)
         if not model or not model:IsA("Model") or model == myChar or seen[model] then return end
         if Players:GetPlayerFromCharacter(model) then return end
+
+        local mName = model.Name:lower()
+        if mName:find("npc") or mName:find("quest") or mName:find("shop") or mName:find("portal") or mName:find("dummy") or mName:find("stand") or mName:find("display") or mName:find("trainer") or mName:find("leaderboard") then return end
+        if workspace:FindFirstChild("Lobby") and model:IsDescendantOf(workspace.Lobby) then return end
 
         -- BẮT BUỘC: Phải là NPC / Quái vật còn sống (Health > 0)
         local hum = model:FindFirstChildOfClass("Humanoid")
@@ -2798,18 +2877,20 @@ local function GetAllEnemies(forceRefresh)
         return enemies
     end
 
-    -- 2. Fallback: Nếu quái nằm ở folder khác trong Workspace (CHỈ LẤY MODEL CÓ HUMANOID CÒN SỐNG)
-    for _, obj in ipairs(workspace:GetChildren()) do
-        if obj:IsA("Model") then
-            Inspect(obj)
-        elseif obj:IsA("Folder") and obj.Name ~= "Terrain" and obj.Name ~= "Camera" then
-            for _, child in ipairs(obj:GetChildren()) do
-                if child:IsA("Model") then
-                    Inspect(child)
-                elseif child:IsA("Folder") then
-                    for _, sub in ipairs(child:GetChildren()) do
-                        if sub:IsA("Model") then
-                            Inspect(sub)
+    -- 2. Fallback: Chỉ quét rộng nếu đang thực sự trong Game và không ở sảnh
+    if CheckInGame() and not IsLobby() then
+        for _, obj in ipairs(workspace:GetChildren()) do
+            if obj:IsA("Model") then
+                Inspect(obj)
+            elseif obj:IsA("Folder") and obj.Name ~= "Terrain" and obj.Name ~= "Camera" and obj.Name ~= "Lobby" and obj.Name ~= "NPCs" and obj.Name ~= "Shops" and obj.Name ~= "Portals" then
+                for _, child in ipairs(obj:GetChildren()) do
+                    if child:IsA("Model") then
+                        Inspect(child)
+                    elseif child:IsA("Folder") then
+                        for _, sub in ipairs(child:GetChildren()) do
+                            if sub:IsA("Model") then
+                                Inspect(sub)
+                            end
                         end
                     end
                 end
@@ -2865,7 +2946,7 @@ end
 
 -- VÒNG LẶP NOCLIP LIÊN TỤC (TỐI ƯU ZERO-ALLOCATION CHỐNG TỤT FPS VÀ TRÀN RÁC BỘ NHỚ) (Bug 4)
 TrackConnection(RunService.Stepped:Connect(function()
-    if not Settings.DisableNoclip then
+    if not Settings.DisableNoclip and CheckInGame() and not IsLobby() then
         for i = 1, #charParts do
             local part = charParts[i]
             if part and part.CanCollide then
@@ -2892,7 +2973,7 @@ task.spawn(function()
             break
         end
 
-        if not CheckInGame() then
+        if not CheckInGame() or IsLobby() then
             if activeFarmTween then activeFarmTween:Cancel(); activeFarmTween = nil end
             local myRoot = GetMyRoot()
             if myRoot then
@@ -2974,11 +3055,11 @@ task.spawn(function()
                         bv.Velocity = Vector3.new(0, 0, 0)
                     end
 
-                    -- Chém thường & Click (Tuân thủ SelectAttackMethod = "Skill" / "Melee" / "Click")
+                    -- Chém thường & Click (Ưu tiên Tool / Remote không cần click, có giới hạn tốc độ click an toàn)
                     local attackMethod = Settings.SelectAttackMethod or "Click"
                     local canMelee = (attackMethod ~= "Skill") and (Settings.AutoMelee or attackMethod == "Melee" or attackMethod == "Click")
                     if canMelee then
-                        SimulateLeftClick()
+                        PerformAttack(target)
                     end
                 else
                     if activeFarmTween then
@@ -3010,14 +3091,14 @@ local lastKillAuraSkillTime = 0
 task.spawn(function()
     while task.wait(0.15) do
         if _G.VHT_SessionID ~= currentSessionID then break end
-        if not CheckInGame() then continue end
+        if not CheckInGame() or IsLobby() then continue end
         local hasOtherPlayers = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
         if not hasOtherPlayers and Settings.KillAura then
             local attackMethod = Settings.SelectAttackMethod or "Click"
             local enemies = GetAllEnemies()
             if #enemies > 0 then
                 if attackMethod ~= "Skill" then
-                    SimulateLeftClick()
+                    PerformAttack(enemies[1])
                 elseif Settings.AutoSkill then
                     -- AttackMethod là Skill và AutoSkill bật -> Kích hoạt 1 skill ngẫu nhiên với nhịp an toàn 2.0s
                     local now = os.clock()
@@ -3025,7 +3106,7 @@ task.spawn(function()
                         lastKillAuraSkillTime = now
                         local skills = { Settings.SkillFirst, Settings.SkillSecond, Settings.SkillThird, Settings.SkillFourth, Settings.SkillFifth }
                         local chosenSkill = skills[math.random(1, #skills)] or 1
-                        local skillRemote = cachedSkillRemote or FindRemote({"UseSkill", "SkillRemote", "Skill"})
+                        local skillRemote = cachedSkillRemote or FindRemote({"UseSkill", "SkillRemote", "Skill", "CastSkill", "ActivateSkill"})
                         local ok = false
                         if skillRemote then
                             ok = SafeFireRemote(skillRemote, tonumber(chosenSkill) or 1)
@@ -3042,9 +3123,9 @@ end)
 
 -- 5. VÒNG LẶP AUTO SKILL (MÔ PHỎNG PHÍM 1-5 & THỨ TỰ ƯU TIÊN + REMOTES + KHOẢNG CÁCH DISTANCETOSKILL)
 task.spawn(function()
-    while task.wait(0.1) do
+    while task.wait(0.15) do
         if _G.VHT_SessionID ~= currentSessionID then break end
-        if not CheckInGame() then continue end
+        if not CheckInGame() or IsLobby() then continue end
         local hasOther = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
         if hasOther then continue end
         if not (Settings.AutoSkill or Settings.AutoPlay) then continue end
@@ -3077,7 +3158,7 @@ task.spawn(function()
                     pcall(function()
                         local skillRemote = cachedSkillRemote
                         if not skillRemote or not skillRemote.Parent then
-                            cachedSkillRemote = FindRemote({"UseSkill", "SkillRemote", "Skill"})
+                            cachedSkillRemote = FindRemote({"UseSkill", "SkillRemote", "Skill", "CastSkill", "ActivateSkill"})
                             skillRemote = cachedSkillRemote
                         end
                         if skillRemote then
@@ -3087,19 +3168,19 @@ task.spawn(function()
                     if not castViaRemote then
                         SimulateSkillKey(skillNum)
                     end
-                    task.wait(0.02)
+                    task.wait(0.1)
                 end
 
                 -- Kế tiếp: Kích hoạt Skill Phụ (Assist Skill)
                 if Settings.AutoAssistSkill or Settings.AutoPlay then
                     UseAssistSkill()
-                    task.wait(0.02)
+                    task.wait(0.1)
                 end
 
                 -- Kế tiếp: Kích hoạt Fruit Skill
                 if Settings.AutoFruitSkill or Settings.AutoPlay then
                     UseFruitSkill()
-                    task.wait(0.02)
+                    task.wait(0.1)
                 end
             end
         end
@@ -3111,7 +3192,7 @@ end)
 task.spawn(function()
     while task.wait(math.max(tonumber(Settings.TweenSpeedDodgePart) or 0.15, 0.05)) do
         if _G.VHT_SessionID ~= currentSessionID then break end
-        if not CheckInGame() then continue end
+        if not CheckInGame() or IsLobby() then continue end
         if Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1 then
             continue
         end
@@ -3267,7 +3348,7 @@ task.spawn(function()
         end
 
         -- Auto Replay (B4 & B1)
-        if Settings.AutoReplay and not (isRaidOpen and Settings.StopReplayIfRaidOpen) then
+        if CheckInGame() and not IsLobby() and Settings.AutoReplay and not (isRaidOpen and Settings.StopReplayIfRaidOpen) then
             local matchEnded = false
             pcall(function()
                 local now = os.clock()
@@ -3751,10 +3832,7 @@ local raidJoinFails = 0
 task.spawn(function()
     while task.wait(2) do
         if _G.VHT_SessionID ~= currentSessionID then break end
-        local enemyCount = #GetAllEnemies()
-        local isLobby = (game.PlaceId == LOBBY_PLACE_ID) 
-            or (workspace:FindFirstChild("Lobby") ~= nil and enemyCount == 0) 
-            or (workspace:FindFirstChild("LobbySpawns") ~= nil and enemyCount == 0)
+        local isLobby = IsLobby()
 
         if isLobby then
             if not hasWaitedLobby then
@@ -4178,15 +4256,6 @@ end
 uiBuilding = false
 if Settings.AutoDeleteMap then task.spawn(function() ApplyAutoDeleteMap(true) end) end
 OrionLib:Init()
-pcall(function()
-    OrionLib:MakeNotification({
-        Name = "VHT HUB",
-        Content = "Giao diện đã sẵn sàng! Nhấn nút VHT hoặc RightShift để đóng/mở.",
-        Image = "rbxassetid://4483345998",
-        Time = 4
-    })
-end)
-print("🎉 VHT HUB - Loaded Successfully with Full 7 Tabs!")
 
 -- ===================================================================
 -- ĐẢM BẢO GIAO DIỆN ORION LUÔN HIỂN THỊ NGAY LẬP TỨC TRÊN MỌI THIẾT BỊ (B10)
