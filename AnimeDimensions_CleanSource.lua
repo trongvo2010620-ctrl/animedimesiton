@@ -212,7 +212,7 @@ local Settings = {
      Language = "Tiếng Việt", -- Ngôn ngữ mặc định (Tiếng Việt / English)
    -- TAB 1: MAIN & FARMING
     MapSelection = "Auto",
-    SelectDifficulty = "Easy",
+    SelectDifficulty = "Auto", -- Tự động chọn độ khó (Auto / Nightmare / Hard / Easy) theo Level và Sức Mạnh
     WaitOnLobbyAfterJoin = 10,
     WaitLobbyOnlyFirstTime = false,
     AutoPlay = false,
@@ -245,6 +245,7 @@ local Settings = {
     ExtremeDimension = false,
     AutoDodgeSkill = false,
     AutoDeleteMap = false,
+    AutoNextRoom = false, -- Tự động chuyển phòng khi hết quái (mặc định tắt)
     AutoRedeemAllCode = false,
     CustomRedeemCodes = "UPDATE, DIMENSIONS, SEASON, FREEGEMS, BOOST",
     BackToLobbyIfGotExploitsDetected = false,
@@ -344,6 +345,8 @@ pcall(function()
                 Settings.SelectAttackMethod = "Skill"
                 Settings.AutoMelee = false
             end
+            local validDifficulties = { ["Auto"] = true, ["Nightmare"] = true, ["Hard"] = true, ["Easy"] = true }
+            if not validDifficulties[Settings.SelectDifficulty] then Settings.SelectDifficulty = "Auto" end
             if not Settings.Language or (Settings.Language ~= "Tiếng Việt" and Settings.Language ~= "English") then Settings.Language = "Tiếng Việt" end
 
             print("⚡ [AutoSave]: Đã tự động khôi phục và kiểm tra schema toàn bộ cài đặt của bạn!")
@@ -661,10 +664,8 @@ local OrionLib = {
 	SaveCfg = false
 }
 
---Feather Icons https://github.com/evoincorp/lucideblox/tree/master/src/modules/util - Created by 7kayoh
+-- Feather Icons (offline, network fetch disabled for 100% stability)
 local Icons = {}
-
-local Icons = {} -- Feather icons network fetch disabled for 100% offline stability	
 
 local function GetIcon(IconName)
 	if Icons[IconName] ~= nil then
@@ -2413,14 +2414,14 @@ local I18N = {
     -- Tab 1: Main (Chính)
     ["Farming"] = { ["Tiếng Việt"] = "Cày Cuốc (Farming)", ["English"] = "Farming" },
     ["MapSelection(AutoUpdate!)"] = { ["Tiếng Việt"] = "Chọn Bản Đồ (Map Selection)", ["English"] = "Map Selection (Auto Update!)" },
-    ["SelectDifficulty"] = { ["Tiếng Việt"] = "Chọn Độ Khó (Difficulty)", ["English"] = "Select Difficulty" },
+    ["SelectDifficulty"] = { ["Tiếng Việt"] = "Chọn Độ Khó (Auto/Nightmare/Hard/Easy)", ["English"] = "Select Difficulty (Auto/Nightmare/Hard/Easy)" },
     ["WaitOnLobbyAfterJoin(OnlyNumber)"] = { ["Tiếng Việt"] = "Thời Gian Đợi Sảnh (Giây)", ["English"] = "Wait On Lobby After Join (Sec)" },
     ["WaitLobbyOnlyFirstTime"] = { ["Tiếng Việt"] = "Chỉ Đợi Sảnh Lần Đầu Tiên", ["English"] = "Wait Lobby Only First Time" },
     ["AutoPlay"] = { ["Tiếng Việt"] = "Tự Động Chơi (Auto Play)", ["English"] = "Auto Play" },
     ["Hardcore"] = { ["Tiếng Việt"] = "Chế Độ Khó (Hardcore)", ["English"] = "Hardcore" },
     ["AutoReplay"] = { ["Tiếng Việt"] = "Tự Động Chơi Lại (Auto Replay)", ["English"] = "Auto Replay" },
     ["FriendOnly"] = { ["Tiếng Việt"] = "Chỉ Bạn Bè (Friend Only)", ["English"] = "Friend Only" },
-    ["AutoSelectMap(DetectedLevel)"] = { ["Tiếng Việt"] = "Tự Chọn Map Theo Cấp (Auto Map)", ["English"] = "Auto Select Map (Detected Level)" },
+    ["AutoSelectMap(DetectedLevel)"] = { ["Tiếng Việt"] = "Tự Chọn Map & Độ Khó Theo LV & Sức Mạnh", ["English"] = "Auto Select Map & Diff (By Level & Power)" },
     ["Combat & Movement"] = { ["Tiếng Việt"] = "Chiến Đấu & Di Chuyển", ["English"] = "Combat & Movement" },
     ["TweenSpeed (>=500: Instant, <500: Smooth)"] = { ["Tiếng Việt"] = "Tốc Độ Bay (>=500: Ngay Lập Tức)", ["English"] = "Tween Speed (>=500: Instant, <500: Smooth)" },
     ["AutoMob"] = { ["Tiếng Việt"] = "Tự Động Đánh Quái (Auto Mob)", ["English"] = "Auto Mob" },
@@ -2450,6 +2451,7 @@ local I18N = {
     ["Return To Lobby"] = { ["Tiếng Việt"] = "Quay Về Sảnh (Return To Lobby)", ["English"] = "Return To Lobby" },
     ["AutoDodgeSkill"] = { ["Tiếng Việt"] = "Tự Động Né Chiêu (Auto Dodge)", ["English"] = "Auto Dodge Skill" },
     ["AutoDeleteMap"] = { ["Tiếng Việt"] = "Xóa Bản Đồ Giảm Lag (Delete Map)", ["English"] = "Auto Delete Map" },
+    ["AutoNextRoom"] = { ["Tiếng Việt"] = "Tự Chuyển Phòng Khi Hết Quái", ["English"] = "Auto Next Room" },
     ["AutoRedeemAllCode"] = { ["Tiếng Việt"] = "Tự Nhập Toàn Bộ Code Game", ["English"] = "Auto Redeem All Codes" },
     ["Custom Codes (Separated by comma)"] = { ["Tiếng Việt"] = "Mã Code Tùy Chỉnh (Cách bằng dấu phẩy)", ["English"] = "Custom Codes (Separated by comma)" },
     ["BackToLobbyIfGotExploitsDetected"] = { ["Tiếng Việt"] = "Về Sảnh Nếu Bị Phát Hiện Exploit", ["English"] = "Back To Lobby If Exploits Detected" },
@@ -2618,8 +2620,8 @@ MainTab:AddDropdown({ Name = T("MapSelection(AutoUpdate!)"),
 })
 
 MainTab:AddDropdown({ Name = T("SelectDifficulty"),
-    Default = Settings.SelectDifficulty,
-    Options = { "Easy", "Hard", "Nightmare" },
+    Default = Settings.SelectDifficulty or "Auto",
+    Options = { "Auto", "Nightmare", "Hard", "Easy" },
     Callback = function(v)
         Settings.SelectDifficulty = v
         AutoSave()
@@ -3148,6 +3150,15 @@ MoreTab:AddToggle({ Name = T("AutoDeleteMap"),
         Settings.AutoDeleteMap = v
         if uiBuilding then return end
         ApplyAutoDeleteMap(v)
+        AutoSave()
+    end
+})
+
+MoreTab:AddToggle({
+    Name = T("AutoNextRoom"),
+    Default = Settings.AutoNextRoom,
+    Callback = function(v)
+        Settings.AutoNextRoom = v
         AutoSave()
     end
 })
@@ -3935,7 +3946,7 @@ local function UpdateStatGui(forcePosition)
 
         local frame = Instance.new("Frame")
         frame.Name = "MainFrame"
-        frame.Size = UDim2.new(0, 220, 0, 115)
+        frame.Size = UDim2.new(0, 220, 0, 132)
         frame.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
         frame.BorderColor3 = Color3.fromRGB(0, 170, 255)
         frame.BorderSizePixel = 1
@@ -4226,8 +4237,6 @@ end)
 -- ===================================================================
 
 local cachedSkillRemote = nil
-local cachedAssistRemote = nil
-local cachedFruitRemote = nil
 
 local function IsLobby()
     if game.PlaceId == LOBBY_PLACE_ID or game.PlaceId == ALT_LOBBY_PLACE_ID then
@@ -4268,8 +4277,6 @@ local keyMap = {
     ["4"] = Enum.KeyCode.Four,
     ["5"] = Enum.KeyCode.Five
 }
-
-local cachedSkillRemote = nil
 
 local function SimulateSkillKey(numStr)
     if not CheckInGame() or IsLobby() then return end
@@ -4458,8 +4465,11 @@ local function PerformAttack(target)
     end
     if attackRemote then
         pcall(function()
-            if target and target.root then
-                SafeFireRemote(attackRemote, target.model or target.root)
+            if target and target.root and target.root.Parent then
+                -- Ưu tiên gửi root part (BasePart) — an toàn hơn Model instance
+                SafeFireRemote(attackRemote, target.root)
+            elseif target and target.model and target.model.Parent then
+                SafeFireRemote(attackRemote, target.model)
             else
                 SafeFireRemote(attackRemote)
             end
@@ -4619,6 +4629,7 @@ local function AdvanceToNextRoom()
     local now = os.clock()
     if now - lastAdvanceRoomTick < 1.0 then return end
     lastAdvanceRoomTick = now
+    if not Settings.AutoNextRoom then return end
 
     local myRoot = GetMyRoot()
     if not myRoot then return end
@@ -5073,10 +5084,19 @@ local lastInfResetTick = 0
 local hasResetThisInfMatch = false
 local waveLabelCache = nil
 local lastWaveScanTick = 0
+local progressedThisMatch = false
+local progressedAtTime = 0
 
 task.spawn(function()
     while task.wait(1.5) do
         if _G.VHT_SessionID ~= currentSessionID then break end
+
+        -- Timeout reset: nếu đã click Leave >30s mà chưa rời được → retry
+        if progressedThisMatch and progressedAtTime > 0 and (os.clock() - progressedAtTime > 30) then
+            progressedThisMatch = false
+            progressedAtTime = 0
+        end
+
         local isRaidOpen = false
         pcall(function()
             local raidTimer = LocalPlayer.PlayerGui:FindFirstChild("RaidTimer", true)
@@ -5158,9 +5178,26 @@ task.spawn(function()
             end)
         end
 
-        -- Auto Replay (B4 & B1)
+        -- Auto Replay (B4 & B1) - Có tự động kiểm tra lên cấp để đổi map
+        if IsLobby() then
+            progressedThisMatch = false
+        end
+
         if CheckInGame() and not IsLobby() and Settings.AutoReplay and not (isRaidOpen and Settings.StopReplayIfRaidOpen) then
+            local bestMap = GetBestMapName()
+            if _G.VHT_CurrentDimensionMap and _G.VHT_CurrentDimensionMap ~= "" and _G.VHT_CurrentDimensionMap:lower() == bestMap:lower() then
+                progressedThisMatch = false
+            end
+
+            local shouldProgressToNewMap = false
+            if (Settings.AutoSelectMap or (Settings.MapSelection == "Auto")) and not progressedThisMatch then
+                if _G.VHT_CurrentDimensionMap and _G.VHT_CurrentDimensionMap ~= "" and _G.VHT_CurrentDimensionMap:lower() ~= bestMap:lower() then
+                    shouldProgressToNewMap = true
+                end
+            end
+
             local matchEnded = false
+            local replayBtnToClick = nil
             pcall(function()
                 local now = os.clock()
                 if not _G.VHT_ReplayCandidates or (now - (_G.VHT_LastReplayScan or 0) > 5) then
@@ -5190,60 +5227,128 @@ task.spawn(function()
                         table.remove(_G.VHT_ReplayCandidates, i)
                     elseif IsGuiElementReallyVisible(gui) then
                         matchEnded = true
-                        if getconnections then
-                            local actConns = getconnections(gui.Activated)
-                            if actConns and #actConns > 0 then
-                                for _, conn in pairs(actConns) do conn:Fire() end
-                            else
-                                local clickConns = getconnections(gui.MouseButton1Click)
-                                if clickConns and #clickConns > 0 then
-                                    for _, conn in pairs(clickConns) do conn:Fire() end
-                                end
-                            end
-                        end
+                        replayBtnToClick = gui
                         break
                     end
                 end
             end)
 
             if matchEnded then
-                pcall(function()
-                    local replayRemote = FindRemote({"ReplayVote", "VoteReplay", "Replay"})
-                    if replayRemote then 
-                        SafeFireRemote(replayRemote, true)
-                    end
-                end)
+                local leftToLobby = false
+                if shouldProgressToNewMap then
+                    -- Đã mở khóa map cao hơn và match đã kết thúc an toàn! Tìm và bấm nút Lobby / Home để về sảnh nhận map mới
+                    pcall(function()
+                        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                        if pg then
+                            local primaryLeaveBtn = nil
+                            local secondaryLeaveBtn = nil
 
-                local isInRaid = (workspace:FindFirstChild("Raid") ~= nil) or (LocalPlayer.PlayerGui:FindFirstChild("RaidGui") ~= nil)
-                if isInRaid then
-                    -- Webhook Raid độc lập với Dimension (Bug 5)
-                    if Settings.SendRaidDrops and (os.clock() - lastWebhookClearTime_Raid > 90) then
-                        lastWebhookClearTime_Raid = os.clock()
-                        SendDiscordWebhook(
-                            "🏆 [RAID CLEARED] Raid Stage Cleared!",
-                            "Player **" .. LocalPlayer.Name .. "** cleared the raid stage successfully!",
-                            {
-                                { name = "Player", value = LocalPlayer.Name, inline = true },
-                                { name = "Time", value = os.date("%H:%M:%S"), inline = true },
-                                { name = "Auto Replay", value = tostring(Settings.AutoReplay), inline = true }
-                            },
-                            65280
-                        )
+                            for _, gui in ipairs(pg:GetDescendants()) do
+                                if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and IsGuiElementReallyVisible(gui) then
+                                    local btnText = (gui:IsA("TextButton") and gui.Text:lower():match("^%s*(.-)%s*$")) or ""
+                                    local btnName = gui.Name:lower():match("^%s*(.-)%s*$") or ""
+
+                                    local inUnrelatedMenu = false
+                                    local cur = gui
+                                    while cur and cur ~= workspace and cur ~= game do
+                                        local cName = cur.Name:lower()
+                                        if cName:find("quest") or cName:find("shop") or cName:find("setting") or cName:find("daily") or cName:find("tutorial") then
+                                            inUnrelatedMenu = true
+                                            break
+                                        end
+                                        cur = cur.Parent
+                                    end
+
+                                    if not inUnrelatedMenu then
+                                        if btnText == "lobby" or btnName == "lobby" or btnText == "home" or btnName == "home" then
+                                            primaryLeaveBtn = gui
+                                            break
+                                        elseif btnText == "leave" or btnName == "leave" or btnText == "exit" or btnName == "exit" then
+                                            if not secondaryLeaveBtn then
+                                                secondaryLeaveBtn = gui
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+
+                            local targetLeaveBtn = primaryLeaveBtn or secondaryLeaveBtn
+                            if targetLeaveBtn then
+                                progressedThisMatch = true
+                                progressedAtTime = os.clock()
+                                leftToLobby = true
+                                if getconnections then
+                                    local actConns = getconnections(targetLeaveBtn.Activated)
+                                    if actConns and #actConns > 0 then for _, c in pairs(actConns) do c:Fire() end end
+                                    local clickConns = getconnections(targetLeaveBtn.MouseButton1Click)
+                                    if clickConns and #clickConns > 0 then for _, c in pairs(clickConns) do c:Fire() end end
+                                end
+                                if firesignal then
+                                    pcall(function() firesignal(targetLeaveBtn.Activated) end)
+                                    pcall(function() firesignal(targetLeaveBtn.MouseButton1Click) end)
+                                end
+                            end
+                        end
+                    end)
+                end
+
+                if not leftToLobby and not progressedThisMatch then
+                    if replayBtnToClick then
+                        if getconnections then
+                            local actConns = getconnections(replayBtnToClick.Activated)
+                            if actConns and #actConns > 0 then
+                                for _, conn in pairs(actConns) do conn:Fire() end
+                            else
+                                local clickConns = getconnections(replayBtnToClick.MouseButton1Click)
+                                if clickConns and #clickConns > 0 then
+                                    for _, conn in pairs(clickConns) do conn:Fire() end
+                                end
+                            end
+                        end
+                        if firesignal then
+                            pcall(function() firesignal(replayBtnToClick.Activated) end)
+                            pcall(function() firesignal(replayBtnToClick.MouseButton1Click) end)
+                        end
                     end
-                else
-                    -- Webhook Dimension độc lập với Raid (Bug 5)
-                    if Settings.SendDimensionDrops and (os.clock() - lastWebhookClearTime_Dimension > 90) then
-                        lastWebhookClearTime_Dimension = os.clock()
-                        SendDiscordWebhook(
-                            "🏆 [CLEAR MAP] Match Cleared!",
-                            "Player **" .. LocalPlayer.Name .. "** cleared the stage successfully!",
-                            {
-                                { name = "Player", value = LocalPlayer.Name, inline = true },
-                                { name = "Time", value = os.date("%H:%M:%S"), inline = true },
-                                { name = "Auto Replay", value = "Requested", inline = true }
-                            },
-                            3066993
-                        )
+
+                    pcall(function()
+                        local replayRemote = FindRemote({"ReplayVote", "VoteReplay", "Replay"})
+                        if replayRemote then 
+                            SafeFireRemote(replayRemote, true)
+                        end
+                    end)
+
+                    local isInRaid = (workspace:FindFirstChild("Raid") ~= nil) or (LocalPlayer.PlayerGui:FindFirstChild("RaidGui") ~= nil)
+                    if isInRaid then
+                        -- Webhook Raid độc lập với Dimension (Bug 5)
+                        if Settings.SendRaidDrops and (os.clock() - lastWebhookClearTime_Raid > 90) then
+                            lastWebhookClearTime_Raid = os.clock()
+                            SendDiscordWebhook(
+                                "🏆 [RAID CLEARED] Raid Stage Cleared!",
+                                "Player **" .. LocalPlayer.Name .. "** cleared the raid stage successfully!",
+                                {
+                                    { name = "Player", value = LocalPlayer.Name, inline = true },
+                                    { name = "Time", value = os.date("%H:%M:%S"), inline = true },
+                                    { name = "Auto Replay", value = tostring(Settings.AutoReplay), inline = true }
+                                },
+                                65280
+                            )
+                        end
+                    else
+                        -- Webhook Dimension độc lập với Raid (Bug 5)
+                        if Settings.SendDimensionDrops and (os.clock() - lastWebhookClearTime_Dimension > 90) then
+                            lastWebhookClearTime_Dimension = os.clock()
+                            SendDiscordWebhook(
+                                "🏆 [CLEAR MAP] Match Cleared!",
+                                "Player **" .. LocalPlayer.Name .. "** cleared the stage successfully!",
+                                {
+                                    { name = "Player", value = LocalPlayer.Name, inline = true },
+                                    { name = "Time", value = os.date("%H:%M:%S"), inline = true },
+                                    { name = "Auto Replay", value = "Requested", inline = true }
+                                },
+                                3066993
+                            )
+                        end
                     end
                 end
             end
@@ -5541,17 +5646,163 @@ local function GetPlayerLevel()
     return level
 end
 
+-- HÀM ĐO ĐẠC SỨC MẠNH NHÂN VẬT (COMBAT POWER / STATS / DAMAGE / CARDS)
+local lastPowerCacheTime = 0
+local cachedPowerValue = 0
+local function GetPlayerPower()
+    local nowCache = os.clock()
+    if cachedPowerValue > 0 and (nowCache - lastPowerCacheTime < 2) then
+        return cachedPowerValue
+    end
+    local power = 0
+    local level = GetPlayerLevel()
+    pcall(function()
+        -- 1. Tìm giá trị Power / CombatPower / Attack / Damage / BP trong player stats
+        local searchFolders = { "leaderstats", "Data", "Stats", "PlayerData", "PlayerStats", "StatsFolder" }
+        local statNames = { "Power", "CombatPower", "TotalPower", "Attack", "Damage", "BP", "Strength", "Atk" }
+        for _, folderName in ipairs(searchFolders) do
+            local f = LocalPlayer:FindFirstChild(folderName)
+            if f then
+                for _, sName in ipairs(statNames) do
+                    local v = f:FindFirstChild(sName)
+                    if v and (v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("StringValue")) then
+                        local val = tonumber(v.Value)
+                        if val and val > power then power = val end
+                    end
+                end
+            end
+        end
+
+        -- 2. Tìm trong Character Attributes hoặc Humanoid
+        local char = GetMyChar()
+        if char then
+            for _, attr in ipairs(statNames) do
+                local val = tonumber(char:GetAttribute(attr))
+                if val and val > power then power = val end
+            end
+        end
+
+        -- 3. Quét PlayerGui tìm nhãn Text hiển thị Power / Sức Mạnh / ATK / Damage
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if pg then
+            for _, lbl in ipairs(pg:GetDescendants()) do
+                if lbl:IsA("TextLabel") and lbl.Visible then
+                    local txt = lbl.Text:lower()
+                    if txt:find("power") or txt:find("sức mạnh") or txt:find("combat") or txt:find("atk") or txt:find("dps") then
+                        local clean = lbl.Text:gsub(",", ""):gsub("k", "000"):gsub("m", "000000")
+                        local num = tonumber(clean:match("%d+%.?%d*"))
+                        if num and num > power then power = num end
+                    end
+                end
+            end
+        end
+
+        -- 4. Tính toán sức mạnh hỗ trợ từ Cards (Thẻ bài)
+        local cardsFolder = FindCardsFolder()
+        if cardsFolder then
+            local cardBonus = 0
+            for _, card in ipairs(cardsFolder:GetChildren()) do
+                local isEquipped = card:FindFirstChild("Equipped") or card:FindFirstChild("IsEquipped")
+                if isEquipped and (isEquipped.Value == true or isEquipped.Value == 1) then
+                    local r = card:FindFirstChild("Rarity") or card:FindFirstChild("Tier")
+                    local rVal = r and tostring(r.Value):lower() or ""
+                    local mult = 1
+                    if rVal:find("mythic") then mult = 5
+                    elseif rVal:find("legendary") then mult = 3
+                    elseif rVal:find("epic") then mult = 2
+                    elseif rVal:find("rare") then mult = 1.5 end
+
+                    local cLvlVal = card:FindFirstChild("Level") or card:FindFirstChild("CardLevel")
+                    local cLvl = cLvlVal and tonumber(cLvlVal.Value) or 1
+                    cardBonus = cardBonus + (cLvl * 25 * mult)
+                end
+            end
+            if cardBonus > 0 then
+                power = math.max(power, power + cardBonus)
+            end
+        end
+    end)
+
+    if power <= 0 then
+        power = level * 100
+    end
+    -- Cập nhật cache (chỉ cache khi power > 0)
+    if power > 0 then
+        lastPowerCacheTime = nowCache
+        cachedPowerValue = power
+    end
+    return power
+end
+
+-- HÀM TỰ ĐỘNG CHỌN ĐỘ KHÓ PHÙ HỢP NHẤT THEO CẤP ĐỘ VÀ SỨC MẠNH
+local function GetBestDifficulty(mapName)
+    if Settings.SelectDifficulty and Settings.SelectDifficulty ~= "Auto" and Settings.SelectDifficulty ~= "" then
+        return Settings.SelectDifficulty
+    end
+
+    local currentLevel = GetPlayerLevel()
+    local currentPower = GetPlayerPower()
+
+    local mapMinLevel = 1
+    for _, dim in ipairs(dimensionLevels) do
+        if dim.name:lower() == (mapName or ""):lower() then
+            mapMinLevel = dim.minLevel or 1
+            break
+        end
+    end
+
+    local reqHard = mapMinLevel + 5
+    local reqNightmare = mapMinLevel + 10
+
+    -- Ngưỡng sức mạnh an toàn theo từng độ khó:
+    -- Easy: Cấp độ mở map (mapMinLevel)
+    -- Hard: Cấp độ mapMinLevel + 5 và Sức mạnh >= reqHard * 80
+    -- Nightmare: Cấp độ mapMinLevel + 10 và Sức mạnh >= reqNightmare * 90
+    local powerReqHard = reqHard * 80
+    local powerReqNightmare = reqNightmare * 90
+
+    if currentLevel >= reqNightmare and currentPower >= powerReqNightmare then
+        return "Nightmare"
+    elseif currentLevel >= reqHard and currentPower >= powerReqHard then
+        return "Hard"
+    else
+        return "Easy"
+    end
+end
+
+-- HÀM TỰ ĐỘNG CHỌN MAP THÔNG MINH THEO CẢ CẤP ĐỘ VÀ SỨC MẠNH
 local function GetBestMapName()
-    if not Settings.AutoSelectMap and Settings.MapSelection and Settings.MapSelection ~= "Auto" then
+    if not Settings.AutoSelectMap and Settings.MapSelection and Settings.MapSelection ~= "Auto" and Settings.MapSelection ~= "" then
         return Settings.MapSelection
     end
+
     local currentLevel = GetPlayerLevel()
+    local currentPower = GetPlayerPower()
     local bestMap = "Titan Dimension"
-    for _, dim in ipairs(dimensionLevels) do
+    local highestUnlockedIndex = 1
+
+    for i, dim in ipairs(dimensionLevels) do
         if currentLevel >= dim.minLevel then
+            highestUnlockedIndex = i
             bestMap = dim.name
         end
     end
+
+    -- THUẬT TOÁN AN TOÀN SỨC MẠNH:
+    -- Nếu vừa lên cấp mở map mới (level chỉ vừa chạm minLevel hoặc minLevel + 1)
+    -- nhưng chỉ số sức mạnh nhân vật quá yếu (chưa đủ card/trang bị, power < minLevel * 75)
+    -- hệ thống sẽ tự động chọn map trước đó (nơi có thể đi Nightmare mượt mà)
+    -- để tiếp tục farm EXP và Card xịn, tránh việc vào map mới bị quái hạ gục liên tục!
+    if highestUnlockedIndex > 1 then
+        local currentDim = dimensionLevels[highestUnlockedIndex]
+        local prevDim = dimensionLevels[highestUnlockedIndex - 1]
+        local safePowerThreshold = currentDim.minLevel * 75
+
+        if currentLevel < currentDim.minLevel + 2 and currentPower < safePowerThreshold then
+            bestMap = prevDim.name
+        end
+    end
+
     return bestMap
 end
 
@@ -5691,8 +5942,11 @@ task.spawn(function()
             end
 
             local hasMapSelection = (Settings.MapSelection and Settings.MapSelection ~= "" and Settings.MapSelection ~= "Auto")
-            local shouldJoin = Settings.AutoPlay or Settings.AutoSelectMap or hasMapSelection or Settings.AutoRaid or Settings.AutoSpeedRaid
-                or Settings.BossRush or Settings.FreeBossRush or Settings.AutoRaidChallenge or Settings.ExtremeDimension
+            local shouldJoin = (Settings.AutoPlay and (Settings.AutoSelectMap or hasMapSelection))
+                or Settings.AutoSelectMap
+                or Settings.AutoRaid or Settings.AutoSpeedRaid
+                or Settings.BossRush or Settings.FreeBossRush
+                or Settings.AutoRaidChallenge or Settings.ExtremeDimension
 
             if shouldJoin and not isJoining then
                 isJoining = true
@@ -5769,18 +6023,21 @@ task.spawn(function()
                 -- 5. Auto Dimension Map (CHẠY KHI BẬT AUTOPLAY, AUTOSELECTMAP HOẶC CHỌN MAP)
                 elseif Settings.AutoPlay or Settings.AutoSelectMap or hasMapSelection then
                     local targetMap = GetBestMapName()
+                    local targetDifficulty = GetBestDifficulty(targetMap)
                     local now = os.clock()
 
-                    if not CheckInGame() and (targetMap ~= _G.VHT_LastDimMap or (now - (_G.VHT_LastDimJoinTime or 0) >= 3)) then
+                    if not CheckInGame() and (targetMap ~= _G.VHT_LastDimMap or targetDifficulty ~= _G.VHT_LastDimDiff or (now - (_G.VHT_LastDimJoinTime or 0) >= 3)) then
                         _G.VHT_LastDimJoinTime = now
                         _G.VHT_LastDimMap = targetMap
+                        _G.VHT_LastDimDiff = targetDifficulty
+                        _G.VHT_CurrentDimensionMap = targetMap
 
-                        -- 1. Gửi tất cả các Remote tạo phòng / tham gia phòng Dimension
+                        -- 1. Gửi tất cả các Remote tạo phòng / tham gia phòng Dimension với độ khó tối ưu
                         pcall(function()
                             local roomRemote = FindRemote({"CreateRoom", "JoinRoom", "StartDungeon", "EnterDimension", "Elevator", "JoinDimension", "CreateDimension", "StartMatch", "EnterDungeon", "PlayDungeon", "QueueDimension", "SelectDimension"})
                             if roomRemote then
-                                SafeFireRemote(roomRemote, targetMap, Settings.SelectDifficulty or "Easy", Settings.FriendOnly, Settings.Hardcore)
-                                SafeFireRemote(roomRemote, targetMap, Settings.SelectDifficulty or "Easy")
+                                SafeFireRemote(roomRemote, targetMap, targetDifficulty, Settings.FriendOnly, Settings.Hardcore)
+                                SafeFireRemote(roomRemote, targetMap, targetDifficulty)
                                 SafeFireRemote(roomRemote, targetMap)
                             end
                         end)
@@ -5813,51 +6070,83 @@ task.spawn(function()
                             end
                         end)
 
-                        -- 3. Tự động click các nút Start / Create / Ready / Enter / Solo / Play trên GUI
+                        -- 3. Tự động chọn tab độ khó (Nightmare / Hard / Easy) và click các nút Start / Create / Solo trên GUI
                         pcall(function()
                             task.wait(0.3)
                             local pg = LocalPlayer:FindFirstChild("PlayerGui")
-                            if pg then
-                                for _, gui in ipairs(pg:GetChildren()) do
-                                    if gui:IsA("ScreenGui") and gui.Enabled then
-                                        local gName = gui.Name:lower()
-                                        local isBlockedGui = gName:find("orion", 1, true) or gName:find("vht", 1, true) or gName:find("slh", 1, true)
-                                        if not isBlockedGui then
-                                            for _, btn in ipairs(gui:GetDescendants()) do
-                                                if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible and IsGuiElementReallyVisible(btn) then
-                                                    local bName = btn.Name:lower()
-                                                    local bText = (btn:IsA("TextButton") and btn.Text:lower()) or ""
-                                                    local isDangerous = bName:find("buy", 1, true) or bText:find("buy", 1, true)
-                                                        or bName:find("purchase", 1, true) or bText:find("purchase", 1, true)
-                                                        or bName:find("robux", 1, true) or bText:find("robux", 1, true)
-                                                        or bName:find("shop", 1, true) or bText:find("shop", 1, true)
-                                                        or bName:find("gift", 1, true) or bText:find("gift", 1, true)
-                                                    if not isDangerous then
-                                                        local isMatch = bText:find("start", 1, true) or bText:find("create", 1, true)
-                                                            or bText:find("ready", 1, true) or bText:find("enter", 1, true)
-                                                            or bText:find("confirm", 1, true) or bText:find("play", 1, true)
-                                                            or bText:find("solo", 1, true) or bText:find("join", 1, true)
-                                                            or bName:find("start", 1, true) or bName:find("create", 1, true)
-                                                            or bName:find("ready", 1, true) or bName:find("enter", 1, true)
-                                                            or bName:find("confirm", 1, true) or bName:find("play", 1, true)
-                                                            or bName:find("solo", 1, true) or bName:find("join", 1, true)
-                                                        if isMatch then
-                                                            if getconnections then
-                                                                local actConns = getconnections(btn.Activated)
-                                                                if actConns and #actConns > 0 then
-                                                                    for _, conn in pairs(actConns) do conn:Fire() end
-                                                                end
-                                                                local clickConns = getconnections(btn.MouseButton1Click)
-                                                                if clickConns and #clickConns > 0 then
-                                                                    for _, conn in pairs(clickConns) do conn:Fire() end
-                                                                end
-                                                            end
-                                                            if firesignal then
-                                                                pcall(function() firesignal(btn.Activated) end)
-                                                                pcall(function() firesignal(btn.MouseButton1Click) end)
-                                                            end
-                                                        end
-                                                    end
+                            if not pg then return end
+
+                            local function ClickButtonOnce(btn)
+                                if not btn or not btn.Parent then return end
+                                local clicked = false
+                                if getconnections then
+                                    local actConns = getconnections(btn.Activated)
+                                    if actConns and #actConns > 0 then
+                                        for _, conn in pairs(actConns) do
+                                            pcall(function() conn:Fire() end)
+                                        end
+                                        clicked = true
+                                    else
+                                        local clickConns = getconnections(btn.MouseButton1Click)
+                                        if clickConns and #clickConns > 0 then
+                                            for _, conn in pairs(clickConns) do
+                                                pcall(function() conn:Fire() end)
+                                            end
+                                            clicked = true
+                                        end
+                                    end
+                                end
+                                if not clicked and firesignal then
+                                    pcall(function() firesignal(btn.Activated) end)
+                                end
+                            end
+
+                            for _, gui in ipairs(pg:GetChildren()) do
+                                if gui:IsA("ScreenGui") and gui.Enabled then
+                                    local gName = gui.Name:lower()
+                                    -- Bỏ qua GUI của Hub và thanh điều hướng chính (HUD / Main / Lobby)
+                                    local isBlockedGui = gName:find("orion", 1, true) or gName:find("vht", 1, true) or gName:find("slh", 1, true)
+                                    if not isBlockedGui then
+                                        for _, btn in ipairs(gui:GetDescendants()) do
+                                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible and IsGuiElementReallyVisible(btn) then
+                                                local bName = btn.Name:lower()
+                                                local bText = (btn:IsA("TextButton") and btn.Text:lower()) or ""
+
+                                                -- TUYỆT ĐỐI KHÔNG CLICK NÚT "PLAY" TRÊN HUD SẢNH (Khắc phục triệt để lỗi tự bấm làm mất menu map)
+                                                local isLobbyPlayButton = bName == "play" or bName == "playbutton" or bName == "playbtn"
+                                                    or bText == "play" or bText == "chơi"
+                                                    or (bName:find("play", 1, true) and (gName:find("main") or gName:find("hud") or gName:find("lobby") or gName:find("bar")))
+                                                if isLobbyPlayButton then
+                                                    continue
+                                                end
+
+                                                local isDangerous = bName:find("buy", 1, true) or bText:find("buy", 1, true)
+                                                    or bName:find("purchase", 1, true) or bText:find("purchase", 1, true)
+                                                    or bName:find("robux", 1, true) or bText:find("robux", 1, true)
+                                                    or bName:find("shop", 1, true) or bText:find("shop", 1, true)
+                                                    or bName:find("gift", 1, true) or bText:find("gift", 1, true)
+                                                    or bName:find("close", 1, true) or bText == "x" or bText == "close"
+                                                if isDangerous then
+                                                    continue
+                                                end
+
+                                                -- 3a. Ưu tiên click nút chọn Độ Khó tối ưu trên giao diện phòng
+                                                local diffLower = (targetDifficulty or "Easy"):lower()
+                                                if bText == diffLower or bName == diffLower or bText:find(diffLower, 1, true) or bName:find(diffLower, 1, true) then
+                                                    ClickButtonOnce(btn)
+                                                end
+
+                                                -- 3b. Tự động click các nút Bắt đầu trận đấu (Start / Create / Solo / Ready / Confirm)
+                                                -- TUYỆT ĐỐI KHÔNG chứa "play" để tránh xung đột với nút Play mở map của người chơi
+                                                local isStartMatch = bText:find("start", 1, true) or bText:find("create", 1, true)
+                                                    or bText:find("solo", 1, true) or bText:find("ready", 1, true)
+                                                    or bText:find("confirm", 1, true)
+                                                    or bName:find("start", 1, true) or bName:find("create", 1, true)
+                                                    or bName:find("solo", 1, true) or bName:find("ready", 1, true)
+                                                    or bName:find("confirm", 1, true)
+
+                                                if isStartMatch then
+                                                    ClickButtonOnce(btn)
                                                 end
                                             end
                                         end
@@ -6072,12 +6361,16 @@ task.spawn(function()
                 local m = math.floor(elapsed / 60)
                 local s = elapsed % 60
                 local curMap = (Settings.MapSelection and Settings.MapSelection ~= "Auto" and Settings.MapSelection) or GetBestMapName()
+                local curDiff = (Settings.SelectDifficulty and Settings.SelectDifficulty ~= "Auto" and Settings.SelectDifficulty) or GetBestDifficulty(curMap)
+                local curPower = GetPlayerPower()
                 local fpsDisplay = Settings.WhiteScreen and "Reduced (3D Off)" or string.format("%d", fps)
                 label.Text = string.format(
-                    "User: %s\nLevel: %s\nMap: %s\nFPS: %s | Time: %02d:%02d",
+                    "User: %s\nLevel: %s | Power: %s\nMap: %s\nDiff: %s\nFPS: %s | Time: %02d:%02d",
                     LocalPlayer.Name,
                     tostring(GetPlayerLevel()),
+                    tostring(math.floor(curPower)),
                     curMap,
+                    curDiff,
                     fpsDisplay,
                     m,
                     s
