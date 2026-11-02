@@ -2318,7 +2318,7 @@ function OrionLib:MakeWindow(WindowConfig)
 			Container:FindFirstChild("UIPadding"):Destroy()
 			SetChildren(SetProps(MakeElement("TFrame"), {
 				Size = UDim2.new(1, 0, 1, 0),
-				Parent = ItemParent
+				Parent = Container
 			}), {
 				AddThemeObject(SetProps(MakeElement("Image", "rbxassetid://3610239960"), {
 					Size = UDim2.new(0, 18, 0, 18),
@@ -4307,29 +4307,100 @@ local keyMap = {
     ["5"] = Enum.KeyCode.Five
 }
 
+local cachedSkillButtons = {}
+local lastSkillButtonScan = 0
+
+local function GetSkillButton(nameKey)
+    local now = os.clock()
+    if now - lastSkillButtonScan > 2 or not cachedSkillButtons[nameKey] or not cachedSkillButtons[nameKey].Parent then
+        lastSkillButtonScan = now
+        cachedSkillButtons = {}
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if pg then
+            for _, gui in ipairs(pg:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Enabled and not gui.Name:lower():find("orion") and not gui.Name:lower():find("vht") then
+                    for _, desc in ipairs(gui:GetDescendants()) do
+                        if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
+                            local dName = desc.Name:lower()
+                            for _, k in ipairs({"1", "2", "3", "4", "5"}) do
+                                if dName == k or dName == "skill" .. k or dName == "button" .. k or desc:GetAttribute("Skill") == tonumber(k) then
+                                    cachedSkillButtons[k] = desc
+                                end
+                            end
+                            if dName == "assist" or dName == "assistskill" or dName == "assistbtn" then
+                                cachedSkillButtons["assist"] = desc
+                            end
+                            if dName == "fruit" or dName == "fruitskill" or dName == "fruitbtn" then
+                                cachedSkillButtons["fruit"] = desc
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return cachedSkillButtons[nameKey]
+end
+
+local function ClickSkillButton(desc)
+    if not desc or not desc.Parent then return end
+    if getconnections then
+        local actConns = getconnections(desc.Activated)
+        if actConns and #actConns > 0 then
+            for _, c in pairs(actConns) do pcall(function() c:Fire() end) end
+            return
+        end
+        local clickConns = getconnections(desc.MouseButton1Click)
+        if clickConns and #clickConns > 0 then
+            for _, c in pairs(clickConns) do pcall(function() c:Fire() end) end
+            return
+        end
+    end
+    if firesignal then
+        pcall(function() firesignal(desc.Activated) end)
+    end
+end
+
 local function SimulateSkillKey(numStr)
     if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
     local kc = keyMap[tostring(numStr)]
-    if kc and VirtualInputManager and VirtualInputManager.SendKeyEvent then
+    if kc then
+        local fired = false
         pcall(function()
-            VirtualInputManager:SendKeyEvent(true, kc, false, game)
-            VirtualInputManager:SendKeyEvent(false, kc, false, game)
+            if VirtualInputManager and VirtualInputManager.SendKeyEvent then
+                VirtualInputManager:SendKeyEvent(true, kc, false, game)
+                task.delay(0.015, function()
+                    pcall(function() VirtualInputManager:SendKeyEvent(false, kc, false, game) end)
+                end)
+                fired = true
+            end
         end)
+        if not fired then
+            pcall(function()
+                if keypress and keyrelease then
+                    keypress(kc.Value)
+                    task.delay(0.015, function()
+                        pcall(function() keyrelease(kc.Value) end)
+                    end)
+                end
+            end)
+        end
     end
 end
 
--- HÀM KÍCH HOẠT SKILL TOÀN DIỆN 100% KHÔNG CLICK CHUỘT
--- (Ưu tiên Remote -> Nút UI trong PlayerGui qua signal/connection -> Phím bàn phím ảo 1-5)
+-- HÀM KÍCH HOẠT SKILL TOÀN DIỆN SIÊU TỐC (MÔ PHỎNG PHÍM + REMOTE + UI CACHE)
 local function CastSkill(skillNum)
     if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
 
     local sNum = tonumber(skillNum) or 1
     local sStr = tostring(skillNum)
-    local castViaRemote = false
 
-    -- 1. Ưu tiên 1: Remote Event / Function của Anime Dimensions (100% ngầm)
+    -- 1. Ưu tiên 1: Gửi phím bàn phím ảo (1-5) siêu tốc (nhanh nhất & tương thích 100% engine Roblox)
+    SimulateSkillKey(skillNum)
+
+    -- 2. Ưu tiên 2: Remote Event / Function của Anime Dimensions (100% ngầm)
     pcall(function()
         local skillRemote = cachedSkillRemote
         if not skillRemote or not skillRemote.Parent then
@@ -4337,134 +4408,81 @@ local function CastSkill(skillNum)
             skillRemote = cachedSkillRemote
         end
         if skillRemote then
-            castViaRemote = SafeFireRemote(skillRemote, sNum)
+            SafeFireRemote(skillRemote, sNum)
         end
     end)
-    if castViaRemote then return end
 
-    -- 2. Ưu tiên 2: Kích hoạt nút UI Skill trong PlayerGui qua signal/connections (Không chạm chuột)
-    local activatedGui = false
+    -- 3. Ưu tiên 3: Kích hoạt nút UI Skill trong PlayerGui qua cache O(1)
     pcall(function()
-        local pg = LocalPlayer:FindFirstChild("PlayerGui")
-        if pg then
-            for _, gui in ipairs(pg:GetChildren()) do
-                if gui:IsA("ScreenGui") and gui.Enabled and not gui.Name:lower():find("orion") and not gui.Name:lower():find("vht") then
-                    for _, desc in ipairs(gui:GetDescendants()) do
-                        if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
-                            local dName = desc.Name:lower()
-                            if dName == sStr or dName == "skill" .. sStr or dName == "button" .. sStr or desc:GetAttribute("Skill") == sNum then
-                                if getconnections then
-                                    local conns = getconnections(desc.Activated) or getconnections(desc.MouseButton1Click)
-                                    if conns and #conns > 0 then
-                                        for _, c in pairs(conns) do c:Fire() end
-                                        activatedGui = true
-                                        return
-                                    end
-                                end
-                                if firesignal then
-                                    firesignal(desc.Activated)
-                                    activatedGui = true
-                                    return
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+        local btn = GetSkillButton(sStr)
+        if btn then ClickSkillButton(btn) end
     end)
-    if activatedGui then return end
-
-    -- 3. Ưu tiên 3: Gửi phím bàn phím ảo (1-5) qua VirtualInputManager (Chỉ phím số, TUYỆT ĐỐI KHÔNG CLICK CHUỘT)
-    SimulateSkillKey(skillNum)
 end
 
--- KÍCH HOẠT SKILL PHỤ (ASSIST SKILL - ƯU TIÊN REMOTE, CHỈ DÙNG PHÍM E KHI KHÔNG CÓ REMOTE - 0 CHUỘT) (B1, B5)
+-- KÍCH HOẠT SKILL PHỤ (ASSIST SKILL - PHÍM E + REMOTE + UI CACHE)
 local function UseAssistSkill()
     if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
-    local remote = FindRemote({"UseAssistSkill", "AssistSkill", "UseAssist", "Assist", "AssistRemote"})
-    if remote then
-        SafeFireRemote(remote)
-        return
-    end
-    local activatedGui = false
+
+    -- 1. Phím ảo E
     pcall(function()
-        local pg = LocalPlayer:FindFirstChild("PlayerGui")
-        if pg then
-            for _, gui in ipairs(pg:GetChildren()) do
-                if gui:IsA("ScreenGui") and gui.Enabled and not gui.Name:lower():find("orion") and not gui.Name:lower():find("vht") then
-                    for _, desc in ipairs(gui:GetDescendants()) do
-                        if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
-                            local dName = desc.Name:lower()
-                            if dName == "assist" or dName == "assistskill" or dName == "assistbtn" then
-                                if getconnections then
-                                    local conns = getconnections(desc.Activated) or getconnections(desc.MouseButton1Click)
-                                    if conns and #conns > 0 then
-                                        for _, c in pairs(conns) do c:Fire() end
-                                        activatedGui = true
-                                        return
-                                    end
-                                end
-                                if firesignal then firesignal(desc.Activated); activatedGui = true; return end
-                            end
-                        end
-                    end
-                end
-            end
+        if VirtualInputManager and VirtualInputManager.SendKeyEvent then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            task.delay(0.015, function()
+                pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
+            end)
+        elseif keypress and keyrelease then
+            keypress(Enum.KeyCode.E.Value)
+            task.delay(0.015, function()
+                pcall(function() keyrelease(Enum.KeyCode.E.Value) end)
+            end)
         end
     end)
-    if activatedGui then return end
-    if VirtualInputManager and VirtualInputManager.SendKeyEvent then
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-        end)
-    end
+
+    -- 2. Remote Assist
+    pcall(function()
+        local remote = FindRemote({"UseAssistSkill", "AssistSkill", "UseAssist", "Assist", "AssistRemote"})
+        if remote then SafeFireRemote(remote) end
+    end)
+
+    -- 3. UI Assist Button (O(1) cache)
+    pcall(function()
+        local btn = GetSkillButton("assist")
+        if btn then ClickSkillButton(btn) end
+    end)
 end
 
--- KÍCH HOẠT FRUIT SKILL (ƯU TIÊN REMOTE, CHỈ DÙNG PHÍM F KHI KHÔNG CÓ REMOTE - 0 CHUỘT) (B1, B5)
+-- KÍCH HOẠT FRUIT SKILL (PHÍM F + REMOTE + UI CACHE)
 local function UseFruitSkill()
     if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
-    local remote = FindRemote({"UseFruitSkill", "FruitSkill", "UseFruit", "Fruit", "FruitRemote"})
-    if remote then
-        SafeFireRemote(remote)
-        return
-    end
-    local activatedGui = false
+
+    -- 1. Phím ảo F
     pcall(function()
-        local pg = LocalPlayer:FindFirstChild("PlayerGui")
-        if pg then
-            for _, gui in ipairs(pg:GetChildren()) do
-                if gui:IsA("ScreenGui") and gui.Enabled and not gui.Name:lower():find("orion") and not gui.Name:lower():find("vht") then
-                    for _, desc in ipairs(gui:GetDescendants()) do
-                        if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
-                            local dName = desc.Name:lower()
-                            if dName == "fruit" or dName == "fruitskill" or dName == "fruitbtn" then
-                                if getconnections then
-                                    local conns = getconnections(desc.Activated) or getconnections(desc.MouseButton1Click)
-                                    if conns and #conns > 0 then
-                                        for _, c in pairs(conns) do c:Fire() end
-                                        activatedGui = true
-                                        return
-                                    end
-                                end
-                                if firesignal then firesignal(desc.Activated); activatedGui = true; return end
-                            end
-                        end
-                    end
-                end
-            end
+        if VirtualInputManager and VirtualInputManager.SendKeyEvent then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+            task.delay(0.015, function()
+                pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game) end)
+            end)
+        elseif keypress and keyrelease then
+            keypress(Enum.KeyCode.F.Value)
+            task.delay(0.015, function()
+                pcall(function() keyrelease(Enum.KeyCode.F.Value) end)
+            end)
         end
     end)
-    if activatedGui then return end
-    if VirtualInputManager and VirtualInputManager.SendKeyEvent then
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
-        end)
-    end
+
+    -- 2. Remote Fruit
+    pcall(function()
+        local remote = FindRemote({"UseFruitSkill", "FruitSkill", "UseFruit", "Fruit", "FruitRemote"})
+        if remote then SafeFireRemote(remote) end
+    end)
+
+    -- 3. UI Fruit Button (O(1) cache)
+    pcall(function()
+        local btn = GetSkillButton("fruit")
+        if btn then ClickSkillButton(btn) end
+    end)
 end
 
 -- HỆ THỐNG TẤN CÔNG THƯỜNG 100% KHÔNG DÙNG CHUỘT VẬT LÝ (TỰ ĐỘNG DÙNG TOOL & REMOTE)
@@ -4969,9 +4987,9 @@ task.spawn(function()
                 if attackMethod ~= "Skill" then
                     PerformAttack(enemies[1])
                 elseif Settings.AutoSkill then
-                    -- AttackMethod là Skill và AutoSkill bật -> Kích hoạt 1 skill ngẫu nhiên với nhịp an toàn 2.0s
+                    -- AttackMethod là Skill và AutoSkill bật -> Kích hoạt 1 skill ngẫu nhiên với nhịp 0.2s siêu nhanh
                     local now = os.clock()
-                    if now - lastKillAuraSkillTime >= 2.0 then
+                    if now - lastKillAuraSkillTime >= 0.2 then
                         lastKillAuraSkillTime = now
                         local skills = { Settings.SkillFirst, Settings.SkillSecond, Settings.SkillThird, Settings.SkillFourth, Settings.SkillFifth }
                         local chosenSkill = skills[math.random(1, #skills)] or 1
@@ -4985,7 +5003,7 @@ end)
 
 -- 5. VÒNG LẶP AUTO SKILL (MÔ PHỎNG PHÍM 1-5 & THỨ TỰ ƯU TIÊN + REMOTES + KHOẢNG CÁCH DISTANCETOSKILL)
 task.spawn(function()
-    while task.wait(0.15) do
+    while task.wait(0.08) do
         if _G.VHT_SessionID ~= currentSessionID then break end
         if not CheckInGame() or IsLobby() then continue end
         local hasOther = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
@@ -5017,19 +5035,19 @@ task.spawn(function()
 
                 for _, skillNum in ipairs(skillOrder) do
                     CastSkill(skillNum)
-                    task.wait(0.1)
+                    task.wait(0.015)
                 end
 
                 -- Kế tiếp: Kích hoạt Skill Phụ (Assist Skill)
                 if Settings.AutoAssistSkill or Settings.AutoPlay then
                     UseAssistSkill()
-                    task.wait(0.1)
+                    task.wait(0.015)
                 end
 
                 -- Kế tiếp: Kích hoạt Fruit Skill
                 if Settings.AutoFruitSkill or Settings.AutoPlay then
                     UseFruitSkill()
-                    task.wait(0.1)
+                    task.wait(0.015)
                 end
             end
         end
@@ -5992,10 +6010,14 @@ local function FindPortalPart(mapName)
 end
 
 local isJoining = false
+local joinStartTime = 0
 local hasWaitedLobby = true
 local raidJoinFails = 0
 task.spawn(function()
     while task.wait(1.5) do
+        if isJoining and (os.clock() - joinStartTime > 15) then
+            isJoining = false
+        end
         if _G.VHT_SessionID ~= currentSessionID then break end
         local isLobby = IsLobby()
 
@@ -6011,12 +6033,14 @@ task.spawn(function()
             local hasMapSelection = (Settings.MapSelection and Settings.MapSelection ~= "" and Settings.MapSelection ~= "Auto")
             local shouldJoin = Settings.AutoPlay
                 or Settings.AutoSelectMap
+                or hasMapSelection
                 or Settings.AutoRaid or Settings.AutoSpeedRaid
                 or Settings.BossRush or Settings.FreeBossRush
                 or Settings.AutoRaidChallenge or Settings.ExtremeDimension
 
             if shouldJoin and not isJoining then
                 isJoining = true
+                joinStartTime = os.clock()
 
                 -- 1. Ưu tiên Boss Rush / Free Boss Rush (ĐỘC LẬP - KHÔNG ĐƯỢC CHẠY DIMENSION) (B1)
                 if Settings.BossRush or Settings.FreeBossRush then
@@ -6114,13 +6138,17 @@ task.spawn(function()
                             local portal = FindPortalPart(targetMap)
                             local myRoot = GetMyRoot()
                             if portal and myRoot then
-                                myRoot.CFrame = portal.CFrame * CFrame.new(0, 3, 0)
-                                if firetouchinterest then
-                                    pcall(function()
-                                        firetouchinterest(myRoot, portal, 0)
-                                        task.wait(0.05)
-                                        firetouchinterest(myRoot, portal, 1)
-                                    end)
+                                local portalPart = portal:IsA("BasePart") and portal or (portal:IsA("Model") and (portal.PrimaryPart or portal:FindFirstChildWhichIsA("BasePart", true)))
+                                local portalCF = portalPart and portalPart.CFrame or (portal:IsA("Model") and portal:GetPivot())
+                                if portalCF then
+                                    myRoot.CFrame = portalCF * CFrame.new(0, 3, 0)
+                                    if firetouchinterest and portalPart then
+                                        pcall(function()
+                                            firetouchinterest(myRoot, portalPart, 0)
+                                            task.wait(0.05)
+                                            firetouchinterest(myRoot, portalPart, 1)
+                                        end)
+                                    end
                                 end
                                 for _, p in pairs(portal:GetDescendants()) do
                                     if p:IsA("ProximityPrompt") and fireproximityprompt then
@@ -6145,17 +6173,20 @@ task.spawn(function()
 
                             local function ClickButtonOnce(btn)
                                 if not btn or not btn.Parent then return end
+                                local clicked = false
                                 if getconnections then
                                     local actConns = getconnections(btn.Activated)
                                     if actConns and #actConns > 0 then
                                         for _, conn in pairs(actConns) do pcall(function() conn:Fire() end) end
+                                        clicked = true
                                     end
                                     local clickConns = getconnections(btn.MouseButton1Click)
                                     if clickConns and #clickConns > 0 then
                                         for _, conn in pairs(clickConns) do pcall(function() conn:Fire() end) end
+                                        clicked = true
                                     end
                                 end
-                                if firesignal then
+                                if not clicked and firesignal then
                                     pcall(function() firesignal(btn.Activated) end)
                                     pcall(function() firesignal(btn.MouseButton1Click) end)
                                 end
@@ -6221,11 +6252,13 @@ task.spawn(function()
 
                                                 -- 3d. Click chọn card Map nếu danh sách Dimension đang mở
                                                 local mapClean = targetMap:lower():gsub(" dimension", ""):gsub(" ", "")
-                                                local bClean = bText:gsub(" ", "")
-                                                local bnClean = bName:gsub(" ", "")
-                                                if not isStartMatch and not (bText == diffLower or bName == diffLower) then
-                                                    if bClean == mapClean or bnClean == mapClean or bClean:find(mapClean, 1, true) or bnClean:find(mapClean, 1, true) then
-                                                        ClickButtonOnce(btn)
+                                                if mapClean ~= "" then
+                                                    local bClean = bText:gsub(" ", "")
+                                                    local bnClean = bName:gsub(" ", "")
+                                                    if not isStartMatch and not (bText == diffLower or bName == diffLower) then
+                                                        if bClean == mapClean or bnClean == mapClean then
+                                                            ClickButtonOnce(btn)
+                                                        end
                                                     end
                                                 end
                                             end
