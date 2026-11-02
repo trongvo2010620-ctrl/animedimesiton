@@ -228,10 +228,12 @@ local Settings = {
     AutoSkill = false,
     AutoAssistSkill = false,
     AutoFruitSkill = false,
-    SelectAttackMethod = "Skill",
-    AutoMelee = false,
+    SelectAttackMethod = "Both",
+    AutoMelee = true,
     FarmDistance = 7,
     FarmPosition = "Above",
+    FarmMovementMode = "Kết hợp (Bay + Tele xa)", -- Chế độ tiếp cận quái: "Kết hợp (Bay + Tele xa)", "Bay lướt mượt (Fly)", "Dịch chuyển (Teleport)"
+    AutoLureMob = true, -- Tự động gom 2-3 bãi quái lại farm một lần (Mob Lure & Group)
 
     -- TAB 2: MORE (RAIDS & EXTREME)
     RaidSelection = "Auto",
@@ -271,7 +273,7 @@ local Settings = {
 
     -- TAB 4: SETTING (DODGE, SKILL PRIORITY, INF)
     SizeDodgePart = 25,
-    SizeDodgePartY = 100,
+    SizeDodgePartY = 22, -- Độ cao né chiêu an toàn (15-30 studs, tránh văng lên trời/kẹt trần)
     TweenSpeedDodgePart = 0.15,
     DodgePartTransparency = 0.9,
     GoAFKIfRaidNotOpen = false,
@@ -2428,8 +2430,10 @@ local I18N = {
     ["FriendOnly"] = { ["Tiếng Việt"] = "Chỉ Bạn Bè (Friend Only)", ["English"] = "Friend Only" },
     ["AutoSelectMap(DetectedLevel)"] = { ["Tiếng Việt"] = "Tự Chọn Map & Độ Khó Theo LV & Sức Mạnh", ["English"] = "Auto Select Map & Diff (By Level & Power)" },
     ["Combat & Movement"] = { ["Tiếng Việt"] = "Chiến Đấu & Di Chuyển", ["English"] = "Combat & Movement" },
-    ["TweenSpeed (>=500: Instant, <500: Smooth)"] = { ["Tiếng Việt"] = "Tốc Độ Bay (>=500: Ngay Lập Tức)", ["English"] = "Tween Speed (>=500: Instant, <500: Smooth)" },
+    ["FarmMovementMode"] = { ["Tiếng Việt"] = "Chế Độ Tiếp Cận Quái (Bay / Tele / Kết hợp)", ["English"] = "Farm Movement Mode (Fly / Tele / Hybrid)" },
+    ["TweenSpeed (>=500: Instant, <500: Smooth)"] = { ["Tiếng Việt"] = "Tốc Độ Bay Lướt / Farm (Studs/s)", ["English"] = "Fly / Farm Speed (Studs/s)" },
     ["AutoMob"] = { ["Tiếng Việt"] = "Tự Động Đánh Quái (Auto Mob)", ["English"] = "Auto Mob" },
+    ["AutoLureMob"] = { ["Tiếng Việt"] = "Gom Quái 2-3 Bãi (Lure & Group Mobs)", ["English"] = "Auto Lure & Group Mobs (2-3 Clusters)" },
     ["Kill Aura"] = { ["Tiếng Việt"] = "Vùng Diệt Quái (Kill Aura)", ["English"] = "Kill Aura" },
     ["DistanceToSkill(OnlyNumber)"] = { ["Tiếng Việt"] = "Khoảng Cách Dùng Skill (Studs)", ["English"] = "Distance To Skill (Studs)" },
     ["AutoSkill"] = { ["Tiếng Việt"] = "Tự Động Dùng Chiêu (Auto Skill)", ["English"] = "Auto Skill" },
@@ -2610,6 +2614,9 @@ local GetPlayerLevel
 local GetPlayerPower
 local GetBestMapName
 local GetBestDifficulty
+local ProgrammaticSetToggle
+local IsLobby
+local FindPortalPart
 
 local MainTab = Window:MakeTab({ Name = T("Main"),
     Icon = "rbxassetid://4483345998",
@@ -2618,7 +2625,7 @@ local MainTab = Window:MakeTab({ Name = T("Main"),
 
 MainTab:AddSection({ Name = T("Farming") })
 
-local ToggleAutoJoinMap, ToggleAutoMob, ToggleAutoMelee, ToggleKillAura, ToggleAutoSkill, ToggleAutoAssistSkill, ToggleAutoFruitSkill, ToggleAutoReplay, ToggleAutoSelectMap
+local ToggleAutoJoinMap, ToggleAutoMob, ToggleAutoMelee, ToggleKillAura, ToggleAutoSkill, ToggleAutoAssistSkill, ToggleAutoFruitSkill, ToggleAutoReplay, ToggleAutoSelectMap, ToggleAutoLureMob
 local DropdownMapSelection, DropdownSelectDifficulty
 
 ToggleAutoJoinMap = MainTab:AddToggle({ Name = T("AutoJoinMap"),
@@ -2627,12 +2634,24 @@ ToggleAutoJoinMap = MainTab:AddToggle({ Name = T("AutoJoinMap"),
         Settings.AutoJoinMap = v
         if uiBuilding then return end
         if v then
+            Settings.AutoSelectMap = true
             Settings.AutoMob = true
             Settings.AutoSkill = true
             Settings.AutoAssistSkill = true
             Settings.AutoFruitSkill = true
             Settings.AutoReplay = true
             Settings.AutoNextRoom = true
+
+            local bestMap = GetBestMapName and GetBestMapName() or "Titan Dimension"
+            local bestDiff = GetBestDifficulty and GetBestDifficulty(bestMap) or "Easy"
+            local curLvl = GetPlayerLevel and GetPlayerLevel() or 1
+
+            if DropdownMapSelection and DropdownMapSelection.Set then
+                pcall(function() DropdownMapSelection:Set(bestMap) end)
+            end
+            if DropdownSelectDifficulty and DropdownSelectDifficulty.Set then
+                pcall(function() DropdownSelectDifficulty:Set(bestDiff) end)
+            end
 
             ProgrammaticSetToggle(ToggleAutoMob, true)
             ProgrammaticSetToggle(ToggleAutoSkill, true)
@@ -2643,7 +2662,7 @@ ToggleAutoJoinMap = MainTab:AddToggle({ Name = T("AutoJoinMap"),
             pcall(function()
                 OrionLib:MakeNotification({
                     Name = "🚀 Auto Join & Farm Map",
-                    Content = "Đã BẬT Tự Động Vào Map & Farm tự động trọn gói!",
+                    Content = "Level " .. tostring(curLvl) .. " -> Map: " .. tostring(bestMap) .. " (" .. tostring(bestDiff) .. ")",
                     Image = "rbxassetid://4483345998",
                     Time = 4
                 })
@@ -2764,7 +2783,7 @@ local previousSettingsBeforeAutoPlay = nil
 local userManuallyOverrodeReplay = false
 local programmaticCounter = 0
 
-local function ProgrammaticSetToggle(toggle, value)
+ProgrammaticSetToggle = function(toggle, value)
     programmaticCounter = programmaticCounter + 1
     pcall(function()
         if toggle and toggle.Set then
@@ -2873,11 +2892,20 @@ MainTab:AddToggle({ Name = T("FriendOnly"),
 
 MainTab:AddSection({ Name = T("Combat & Movement") })
 
+MainTab:AddDropdown({ Name = T("FarmMovementMode"),
+    Default = Settings.FarmMovementMode or "Kết hợp (Bay + Tele xa)",
+    Options = { "Kết hợp (Bay + Tele xa)", "Bay lướt mượt (Fly)", "Dịch chuyển (Teleport)" },
+    Callback = function(v)
+        Settings.FarmMovementMode = v
+        AutoSave()
+    end
+})
+
 MainTab:AddTextbox({ Name = T("TweenSpeed (>=500: Instant, <500: Smooth)"),
-    Default = tostring(Settings.TweenSpeed),
+    Default = tostring(Settings.TweenSpeed or 350),
     TextDisappear = false,
     Callback = function(v)
-        Settings.TweenSpeed = tonumber(v) or 500
+        Settings.TweenSpeed = tonumber(v) or 350
         AutoSave()
     end
 })
@@ -2886,6 +2914,14 @@ ToggleAutoMob = MainTab:AddToggle({ Name = T("AutoMob"),
     Default = Settings.AutoMob,
     Callback = function(v)
         Settings.AutoMob = v
+        AutoSave()
+    end
+})
+
+ToggleAutoLureMob = MainTab:AddToggle({ Name = T("AutoLureMob"),
+    Default = (Settings.AutoLureMob ~= false),
+    Callback = function(v)
+        Settings.AutoLureMob = v
         AutoSave()
     end
 })
@@ -2932,15 +2968,19 @@ ToggleAutoFruitSkill = MainTab:AddToggle({ Name = T("AutoFruitSkill"),
 })
 
 MainTab:AddDropdown({ Name = T("SelectAttackMethod"),
-    Default = Settings.SelectAttackMethod,
-    Options = { "Skill", "Melee", "Click" },
+    Default = Settings.SelectAttackMethod or "Both",
+    Options = { "Both", "Skill", "Melee", "Click" },
     Callback = function(v)
         Settings.SelectAttackMethod = v
         if uiBuilding then return end
-        if v == "Skill" then
+        if v == "Both" then
+            Settings.AutoMelee = true
+            ProgrammaticSetToggle(ToggleAutoMelee, true)
+            Settings.AutoSkill = true
+            ProgrammaticSetToggle(ToggleAutoSkill, true)
+        elseif v == "Skill" then
             Settings.AutoMelee = false
-            ProgrammaticSetToggle(ToggleAutoMelee, false) -- Dùng ProgrammaticSetToggle nhất quán (LOW-1)
-            -- Bật AutoSkill để đảm bảo skill luôn được tung ra khi chọn chế độ Skill (CRIT-2)
+            ProgrammaticSetToggle(ToggleAutoMelee, false)
             Settings.AutoSkill = true
             ProgrammaticSetToggle(ToggleAutoSkill, true)
         else
@@ -2976,6 +3016,10 @@ if Settings.AutoPlay and not previousSettingsBeforeAutoPlay then
         Settings.AutoMelee = false
     else
         Settings.AutoMelee = true
+    end
+    if Settings.SelectAttackMethod == "Both" then
+        Settings.AutoMelee = true
+        Settings.AutoSkill = true
     end
     Settings.KillAura = false
     Settings.AutoSkill = true
@@ -3534,10 +3578,10 @@ SettingTab:AddTextbox({ Name = T("SizeDodgePart (Studs Radius)"),
 })
 
 SettingTab:AddTextbox({ Name = T("SizeDodgePart Y (OnlyNumber)"),
-    Default = tostring(Settings.SizeDodgePartY),
+    Default = tostring(Settings.SizeDodgePartY or 22),
     TextDisappear = false,
     Callback = function(v)
-        Settings.SizeDodgePartY = tonumber(v) or 100
+        Settings.SizeDodgePartY = tonumber(v) or 22
         AutoSave()
     end
 })
@@ -4345,7 +4389,7 @@ end)
 
 local cachedSkillRemote = nil
 
-local function IsLobby()
+IsLobby = function()
     if game.PlaceId == LOBBY_PLACE_ID or game.PlaceId == ALT_LOBBY_PLACE_ID then
         -- Kể cả trùng PlaceId, chỉ coi là trong trận nếu có Folder Dungeon hoặc Enemies có quái thật
         if workspace:FindFirstChild("Dungeon") ~= nil then return false end
@@ -4387,10 +4431,12 @@ local keyMap = {
 
 local cachedSkillButtons = {}
 local lastSkillButtonScan = 0
+local lastSkillCastTime = {}
 
 local function GetSkillButton(nameKey)
     local now = os.clock()
-    if now - lastSkillButtonScan > 2 or not cachedSkillButtons[nameKey] or not cachedSkillButtons[nameKey].Parent then
+    local sKey = tostring(nameKey or ""):lower()
+    if now - lastSkillButtonScan > 1.5 or (cachedSkillButtons[sKey] and not cachedSkillButtons[sKey].Parent) then
         lastSkillButtonScan = now
         cachedSkillButtons = {}
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
@@ -4400,16 +4446,48 @@ local function GetSkillButton(nameKey)
                     for _, desc in ipairs(gui:GetDescendants()) do
                         if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
                             local dName = desc.Name:lower()
+                            local pName = desc.Parent and desc.Parent.Name:lower() or ""
+
+                            -- 1. Quét tìm nút Skill 1 đến 5 (theo tên nút, tên cha, attributes và TextLabel con)
                             for _, k in ipairs({"1", "2", "3", "4", "5"}) do
-                                if dName == k or dName == "skill" .. k or dName == "button" .. k or desc:GetAttribute("Skill") == tonumber(k) then
+                                if dName == k or dName == "skill" .. k or dName == "skill_" .. k or dName == "button" .. k or dName == "btn" .. k or dName == "slot" .. k or dName == "action" .. k or pName == k or pName == "skill" .. k or pName == "slot" .. k or desc:GetAttribute("Skill") == tonumber(k) or desc:GetAttribute("Slot") == tonumber(k) or desc:GetAttribute("Key") == tonumber(k) then
                                     cachedSkillButtons[k] = desc
+                                else
+                                    for _, child in ipairs(desc:GetChildren()) do
+                                        if child:IsA("TextLabel") and child.Visible then
+                                            local cTxt = child.Text:gsub("%s+", "")
+                                            local cName = child.Name:lower()
+                                            if cTxt == k and (child.Position.Y.Scale < 0.4 or cName:find("key") or cName:find("slot") or cName:find("bind") or cName == k) then
+                                                cachedSkillButtons[k] = desc
+                                                break
+                                            end
+                                        end
+                                    end
                                 end
                             end
-                            if dName == "assist" or dName == "assistskill" or dName == "assistbtn" then
+
+                            -- 2. Quét tìm nút Assist Skill (Nhân vật phụ / Trợ thủ)
+                            if dName:find("assist") or dName:find("partner") or dName:find("sub") or dName:find("swap") or dName:find("char2") or pName:find("assist") or pName:find("partner") or pName:find("sub") then
                                 cachedSkillButtons["assist"] = desc
+                            else
+                                for _, child in ipairs(desc:GetChildren()) do
+                                    if child:IsA("TextLabel") and child.Visible and child.Text:lower():gsub("%s+", "") == "e" then
+                                        cachedSkillButtons["assist"] = desc
+                                        break
+                                    end
+                                end
                             end
-                            if dName == "fruit" or dName == "fruitskill" or dName == "fruitbtn" then
+
+                            -- 3. Quét tìm nút Fruit / Extra Skill (Trái ác quỷ / Kỹ năng bổ trợ)
+                            if dName:find("fruit") or dName:find("extra") or dName:find("ability") or pName:find("fruit") or pName:find("extra") then
                                 cachedSkillButtons["fruit"] = desc
+                            else
+                                for _, child in ipairs(desc:GetChildren()) do
+                                    if child:IsA("TextLabel") and child.Visible and child.Text:lower():gsub("%s+", "") == "f" then
+                                        cachedSkillButtons["fruit"] = desc
+                                        break
+                                    end
+                                end
                             end
                         end
                     end
@@ -4417,26 +4495,109 @@ local function GetSkillButton(nameKey)
             end
         end
     end
-    return cachedSkillButtons[nameKey]
+    return cachedSkillButtons[sKey]
 end
 
 local function ClickSkillButton(desc)
     if not desc or not desc.Parent then return end
+    local clicked = false
     if getconnections then
-        local actConns = getconnections(desc.Activated)
-        if actConns and #actConns > 0 then
-            for _, c in pairs(actConns) do pcall(function() c:Fire() end) end
-            return
-        end
-        local clickConns = getconnections(desc.MouseButton1Click)
-        if clickConns and #clickConns > 0 then
-            for _, c in pairs(clickConns) do pcall(function() c:Fire() end) end
-            return
-        end
+        pcall(function()
+            local actConns = getconnections(desc.Activated)
+            if actConns and #actConns > 0 then
+                for _, c in pairs(actConns) do pcall(function() c:Fire() end) end
+                clicked = true
+            end
+        end)
+        pcall(function()
+            local clickConns = getconnections(desc.MouseButton1Click)
+            if clickConns and #clickConns > 0 then
+                for _, c in pairs(clickConns) do pcall(function() c:Fire() end) end
+                clicked = true
+            end
+        end)
+        pcall(function()
+            local downConns = getconnections(desc.MouseButton1Down)
+            if downConns and #downConns > 0 then
+                for _, c in pairs(downConns) do pcall(function() c:Fire() end) end
+                clicked = true
+            end
+        end)
+        pcall(function()
+            if desc.TouchTap then
+                local touchConns = getconnections(desc.TouchTap)
+                if touchConns and #touchConns > 0 then
+                    for _, c in pairs(touchConns) do pcall(function() c:Fire() end) end
+                    clicked = true
+                end
+            end
+        end)
     end
-    if firesignal then
+    if not clicked and firesignal then
         pcall(function() firesignal(desc.Activated) end)
+        pcall(function() firesignal(desc.MouseButton1Click) end)
+        pcall(function() firesignal(desc.MouseButton1Down) end)
+        pcall(function()
+            if desc.TouchTap then firesignal(desc.TouchTap) end
+        end)
     end
+end
+
+-- HÀM KIỂM TRA SKILL SẴN SÀNG ("CÓ CHIÊU"): KHÔNG BỊ COOLDOWN TRÊN UI
+local function IsSkillReady(desc, skillKey)
+    local now = os.clock()
+    local sKey = tostring(skillKey or "")
+
+    -- Grace period: Không xả lặp lại cùng 1 skill trong vòng 0.25 giây
+    if sKey ~= "" and lastSkillCastTime[sKey] and (now - lastSkillCastTime[sKey]) < 0.25 then
+        return false
+    end
+
+    if not desc or not desc.Parent then
+        return true -- Nếu không có nút UI (chơi PC hoặc ẩn UI) thì cho phép kích hoạt qua phím/remote
+    end
+
+    -- Quét các thành phần con để xác định Cooldown
+    for _, item in ipairs(desc:GetDescendants()) do
+        if item:IsA("TextLabel") and item.Visible and item.TextTransparency < 0.8 then
+            local txt = item.Text:gsub("%s+", "")
+            local iName = item.Name:lower()
+
+            -- Kiểm tra xem có phải nhãn phím cố định (Keybind: "1", "2", "3", "4", "5", "E", "F") không
+            local isKeyLabel = false
+            if iName:find("key") or iName:find("bind") or iName:find("slot") or iName:find("num") then
+                isKeyLabel = true
+            elseif (txt == sKey or txt == "e" or txt == "f" or txt == "q") and item.Position.Y.Scale < 0.35 then
+                isKeyLabel = true
+            end
+
+            -- Nếu không phải nhãn phím, kiểm tra nếu có số đếm giây Cooldown
+            if not isKeyLabel and txt ~= "" and txt ~= "0" and txt ~= "0.0" and txt ~= "0s" then
+                local num = tonumber(txt:match("^(%d+%.?%d*)"))
+                if num and num > 0.05 then
+                    return false -- Đang hồi chiêu (còn num giây) -> KHÔNG SẴN SÀNG
+                end
+                if (iName:find("cd") or iName:find("cooldown") or iName:find("time")) and txt ~= "" then
+                    local anyNum = tonumber(txt:match("(%d+%.?%d*)"))
+                    if anyNum and anyNum > 0.05 then
+                        return false
+                    end
+                end
+            end
+        end
+
+        -- Kiểm tra Frame Cooldown phủ mờ
+        if (item:IsA("Frame") or item:IsA("ImageLabel")) and item.Visible then
+            local iName = item.Name:lower()
+            if (iName:find("cd") or iName:find("cooldown") or iName:find("shade") or iName:find("dark")) and item.BackgroundTransparency < 0.85 then
+                if (item.Size.Y.Scale > 0.15 or item.Size.Y.Offset > 10) and (item.Size.X.Scale > 0.15 or item.Size.X.Offset > 10) then
+                    return false
+                end
+            end
+        end
+    end
+
+    return true -- Có chiêu!
 end
 
 local function SimulateSkillKey(numStr)
@@ -4474,6 +4635,7 @@ local function CastSkill(skillNum)
 
     local sNum = tonumber(skillNum) or 1
     local sStr = tostring(skillNum)
+    lastSkillCastTime[sStr] = os.clock()
 
     -- 1. Ưu tiên 1: Gửi phím bàn phím ảo (1-5) siêu tốc (nhanh nhất & tương thích 100% engine Roblox)
     SimulateSkillKey(skillNum)
@@ -4490,7 +4652,7 @@ local function CastSkill(skillNum)
         end
     end)
 
-    -- 3. Ưu tiên 3: Kích hoạt nút UI Skill trong PlayerGui qua cache O(1)
+    -- 3. Ưu tiên 3: Kích hoạt nút UI Skill trong PlayerGui (Cực kỳ quan trọng trên Mobile)
     pcall(function()
         local btn = GetSkillButton(sStr)
         if btn then ClickSkillButton(btn) end
@@ -4501,6 +4663,7 @@ end
 local function UseAssistSkill()
     if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
+    lastSkillCastTime["assist"] = os.clock()
 
     -- 1. Phím ảo E
     pcall(function()
@@ -4534,6 +4697,7 @@ end
 local function UseFruitSkill()
     if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
+    lastSkillCastTime["fruit"] = os.clock()
 
     -- 1. Phím ảo F
     pcall(function()
@@ -4569,9 +4733,9 @@ local function PerformAttack(target)
     if not CheckInGame() or IsLobby() then return end
     if UserInputService:GetFocusedTextBox() then return end
 
-    local attackMethod = Settings.SelectAttackMethod or "Skill"
-    -- Nếu chọn chế độ Skill: Tuyệt đối không đánh thường, nhường toàn bộ cho Auto Skill
-    if attackMethod == "Skill" then return end
+    local attackMethod = Settings.SelectAttackMethod or "Both"
+    -- Chỉ bỏ qua đánh thường nếu người dùng chọn chỉ dùng Skill thuần túy và không bật AutoMelee
+    if attackMethod == "Skill" and not Settings.AutoMelee then return end
 
     -- 1. Ưu tiên 1: Tự động chém/đánh bằng Tool.Activate() nếu nhân vật đang cầm vũ khí (100% không cần click chuột)
     local char = GetMyChar()
@@ -4954,13 +5118,20 @@ TrackConnection(RunService.Stepped:Connect(function()
     end
 end))
 
--- 3. VÒNG LẶP FARM CHÍNH (TỰ ĐỘNG TELEPORT ĐẾN QUÁI & ĐÁNH, CHỐNG TỤT FPS & JITTER TWEEN)
+-- 3. VÒNG LẶP FARM CHÍNH: GOM 2-3 BÃI QUÁI & VỪA ĐÁNH THƯỜNG VỪA SPAM SKILL (SMART CLUSTER FARM)
 local activeFarmTween = nil
 local lastTargetModel = nil
 local isDodging = false
 _G.VHT_IsDodging = false
 
 task.spawn(function()
+    -- Trạng thái Gom Quái Đa Điểm (Lure & Group Mobs 2-3 Bãi)
+    local lureState = "LURE" -- "LURE" (gom quái) hoặc "KILL" (xả sát thương)
+    local lureClusterIndex = 1
+    local lureHitsDone = 0
+    local lureLastHitTime = 0
+    local lurePhaseStartTime = os.clock()
+
     while task.wait(0.03) do
         if _G.VHT_SessionID ~= currentSessionID then
             if activeFarmTween then activeFarmTween:Cancel(); activeFarmTween = nil end
@@ -5003,7 +5174,80 @@ task.spawn(function()
                     end
                     continue
                 end
-                local target = GetTarget()
+                local target = nil
+                local allEnemies = GetAllEnemies()
+
+                -- CƠ CHẾ GOM QUÁI 2-3 BÃI (LURE & GROUP MOBS)
+                if Settings.AutoLureMob and not Settings.AutoWalkOnlyBoss and #allEnemies >= 4 then
+                    -- Phân cụm quái thành các bãi dựa trên khoảng cách 35 studs
+                    local clusters = {}
+                    for _, e in ipairs(allEnemies) do
+                        if e.root and e.root.Parent then
+                            local pos = e.root.Position
+                            local clFound = nil
+                            for _, cl in ipairs(clusters) do
+                                if (pos - cl.centroid).Magnitude < 35 then
+                                    clFound = cl
+                                    break
+                                end
+                            end
+                            if clFound then
+                                table.insert(clFound.enemies, e)
+                            else
+                                table.insert(clusters, {
+                                    centroid = pos,
+                                    enemies = { e },
+                                    leader = e
+                                })
+                            end
+                        end
+                    end
+
+                    if #clusters >= 2 then
+                        table.sort(clusters, function(a, b)
+                            return (myRoot.Position - a.centroid).Magnitude < (myRoot.Position - b.centroid).Magnitude
+                        end)
+
+                        local maxClusters = math.min(#clusters, 3) -- Gom tối đa 2-3 bãi
+                        local now = os.clock()
+
+                        -- Timeout an toàn 3.5s cho pha gom để tránh kẹt
+                        if (now - lurePhaseStartTime) > 3.5 and lureState == "LURE" then
+                            lureState = "KILL"
+                            lurePhaseStartTime = now
+                        end
+
+                        if lureState == "LURE" then
+                            if lureClusterIndex > maxClusters then
+                                -- Đã click aggro đủ 2-3 khu vực -> Chuyển sang pha tiêu diệt cụm
+                                lureState = "KILL"
+                                lurePhaseStartTime = now
+                                target = GetTarget()
+                            else
+                                local currCl = clusters[lureClusterIndex]
+                                if currCl and currCl.leader and currCl.leader.root and currCl.leader.root.Parent then
+                                    target = currCl.leader
+                                else
+                                    target = GetTarget()
+                                end
+                            end
+                        else
+                            -- Pha KILL: Quái các bãi đã tụ lại gần -> Tiêu diệt toàn bộ
+                            target = GetTarget()
+                            if (now - lurePhaseStartTime) > 8.0 or #allEnemies <= 2 then
+                                lureState = "LURE"
+                                lureClusterIndex = 1
+                                lureHitsDone = 0
+                                lurePhaseStartTime = now
+                            end
+                        end
+                    else
+                        target = GetTarget()
+                    end
+                else
+                    target = GetTarget()
+                end
+
                 if target and target.root then
                     local targetCFrame = target.root.CFrame
                     local farmDist = tonumber(Settings.FarmDistance) or 7
@@ -5015,7 +5259,7 @@ task.spawn(function()
                         targetCF = targetCFrame * CFrame.new(0, farmDist, 0) * CFrame.Angles(math.rad(-90), 0, 0)
                     end
 
-                    -- Khi đổi quái mới: hủy ngay tween cũ để lập tức dịch chuyển sang quái mới
+                    -- Khi đổi quái mới: ghi nhận model quái
                     if lastTargetModel ~= target.model then
                         lastTargetModel = target.model
                         if activeFarmTween then
@@ -5024,26 +5268,59 @@ task.spawn(function()
                         end
                     end
 
+                    local curPos = myRoot.Position
+                    local goalPos = targetCF.Position
+                    local delta = goalPos - curPos
+                    local dist = delta.Magnitude
+
+                    local mode = Settings.FarmMovementMode or "Kết hợp (Bay + Tele xa)"
+                    local flySpeed = tonumber(Settings.TweenSpeed) or 350
+                    if flySpeed <= 0 then flySpeed = 350 end
+
+                    -- CƠ CHẾ TIẾP CẬN QUÁI: BAY LƯỚT SIÊU MƯỢT HOẶC KẾT HỢP TELEPORT (CHỐNG DELAY & CHỐNG RƠI)
                     pcall(function()
-                        local tSpeed = tonumber(Settings.TweenSpeed) or 500
-                        local dist = (myRoot.Position - targetCF.Position).Magnitude
-                        if tSpeed < 500 and dist > 15 then
-                            if not activeFarmTween then
-                                local duration = math.clamp(dist / tSpeed, 0.1, 0.8)
-                                activeFarmTween = TweenService:Create(myRoot, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
-                                activeFarmTween.Completed:Connect(function() activeFarmTween = nil end)
-                                activeFarmTween:Play()
+                        myRoot.AssemblyLinearVelocity = Vector3.zero
+                        myRoot.AssemblyAngularVelocity = Vector3.zero
+
+                        local isAbove = (Settings.FarmPosition == "Above")
+                        local orient = isAbove and CFrame.Angles(math.rad(-90), 0, 0) or CFrame.new()
+
+                        if mode == "Dịch chuyển (Teleport)" or mode == "Teleport" or (flySpeed >= 750) then
+                            -- Chế độ 1: Dịch chuyển tức thời
+                            if char.PrimaryPart then pcall(function() char:PivotTo(targetCF) end) end
+                            myRoot.CFrame = targetCF
+                        elseif mode == "Bay lướt mượt (Fly)" or mode == "Fly" then
+                            -- Chế độ 2: 100% Bay lướt mượt mà liên tục (Fly / Glide) không teleport
+                            if dist > 2 then
+                                local step = math.min(dist, flySpeed * 0.035)
+                                local nextPos = curPos + delta.Unit * step
+                                local nextCF = CFrame.new(nextPos, goalPos) * orient
+                                if char.PrimaryPart then pcall(function() char:PivotTo(nextCF) end) end
+                                myRoot.CFrame = nextCF
+                            else
+                                if char.PrimaryPart then pcall(function() char:PivotTo(targetCF) end) end
+                                myRoot.CFrame = targetCF
                             end
                         else
-                            if activeFarmTween then
-                                activeFarmTween:Cancel()
-                                activeFarmTween = nil
+                            -- Chế độ 3 (MẶC ĐỊNH): KẾT HỢP (HYBRID) - Bay lướt siêu tốc + Nhảy nhanh khi quá xa
+                            if dist > 150 then
+                                -- Quá xa (>150 studs, đổi phòng hoặc quái xuất hiện xa): Nhảy nhanh đến cách quái 25 studs rồi lướt mượt vào
+                                local jumpPos = goalPos - delta.Unit * 25
+                                local jumpCF = CFrame.new(jumpPos, goalPos) * orient
+                                if char.PrimaryPart then pcall(function() char:PivotTo(jumpCF) end) end
+                                myRoot.CFrame = jumpCF
+                            elseif dist > 2 then
+                                -- Tầm gần & trung (<=150 studs): Bay lướt mượt mà siêu tốc không bị delay hit
+                                local step = math.min(dist, flySpeed * 0.035)
+                                local nextPos = curPos + delta.Unit * step
+                                local nextCF = CFrame.new(nextPos, goalPos) * orient
+                                if char.PrimaryPart then pcall(function() char:PivotTo(nextCF) end) end
+                                myRoot.CFrame = nextCF
+                            else
+                                -- Đã tới sát quái: Khóa vị trí chuẩn xác bám sát mục tiêu
+                                if char.PrimaryPart then pcall(function() char:PivotTo(targetCF) end) end
+                                myRoot.CFrame = targetCF
                             end
-                            myRoot.AssemblyLinearVelocity = Vector3.zero
-                            if char.PrimaryPart then
-                                pcall(function() char:PivotTo(targetCF) end)
-                            end
-                            myRoot.CFrame = targetCF
                         end
                     end)
 
@@ -5053,25 +5330,44 @@ task.spawn(function()
                         pcall(function() myRoot.Velocity = Vector3.zero; myRoot.RotVelocity = Vector3.zero end)
                         bv = Instance.new("BodyVelocity")
                         bv.Name = "FarmBV"
-                        bv.MaxForce = Vector3.new(100000, 100000, 100000)
+                        bv.MaxForce = Vector3.new(1000000, 1000000, 1000000)
                         bv.Velocity = Vector3.new(0, 0, 0)
                         bv.Parent = myRoot
                     else
                         bv.Velocity = Vector3.new(0, 0, 0)
                     end
 
-                    local attackMethod = Settings.SelectAttackMethod or "Skill"
-                    local canMelee = (attackMethod ~= "Skill") and (Settings.AutoMelee or attackMethod == "Melee" or attackMethod == "Click")
-                    if canMelee then
-                        PerformAttack(target)
+                    -- VỪA ĐÁNH THƯỜNG VỪA SPAM SKILL ĐỒNG THỜI
+                    local attackMethod = Settings.SelectAttackMethod or "Both"
+                    local canMelee = Settings.AutoMelee or attackMethod == "Melee" or attackMethod == "Click" or attackMethod == "Both" or attackMethod:find("Both") or attackMethod:find("Cả hai")
+                    if dist <= (farmDist + 8) then
+                        if canMelee then
+                            PerformAttack(target)
+                        end
+
+                        -- Xử lý click 1-2 cái mỗi khu vực để quái aggro đi theo (Pha LURE)
+                        if Settings.AutoLureMob and lureState == "LURE" then
+                            local now = os.clock()
+                            if now - lureLastHitTime >= 0.08 then
+                                lureLastHitTime = now
+                                lureHitsDone = lureHitsDone + 1
+                                if lureHitsDone >= 2 then
+                                    lureClusterIndex = lureClusterIndex + 1
+                                    lureHitsDone = 0
+                                end
+                            end
+                        end
                     end
                 else
                     if activeFarmTween then
                         activeFarmTween:Cancel()
                         activeFarmTween = nil
                     end
+                    -- Giữ nguyên FarmBV để nhân vật lơ lửng trên không, KHÔNG BỊ RƠI XUỐNG SÀN khi chờ quái mới
                     local bv = myRoot:FindFirstChild("FarmBV")
-                    if bv then bv:Destroy() end
+                    if bv then
+                        bv.Velocity = Vector3.zero
+                    end
 
                     -- Tự động tiến vào phòng tiếp theo khi quái phòng hiện tại đã chết hết
                     AdvanceToNextRoom()
@@ -5105,13 +5401,21 @@ task.spawn(function()
                 if attackMethod ~= "Skill" then
                     PerformAttack(enemies[1])
                 elseif Settings.AutoSkill then
-                    -- AttackMethod là Skill và AutoSkill bật -> Kích hoạt 1 skill ngẫu nhiên với nhịp 0.2s siêu nhanh
+                    -- AttackMethod là Skill và AutoSkill bật -> Tìm chiêu đang sẵn sàng ("có chiêu nào dùng chiêu đó")
                     local now = os.clock()
-                    if now - lastKillAuraSkillTime >= 0.2 then
+                    if now - lastKillAuraSkillTime >= 0.15 then
                         lastKillAuraSkillTime = now
-                        local skills = { Settings.SkillFirst, Settings.SkillSecond, Settings.SkillThird, Settings.SkillFourth, Settings.SkillFifth }
-                        local chosenSkill = skills[math.random(1, #skills)] or 1
-                        CastSkill(chosenSkill)
+                        local skills = { Settings.SkillFirst, Settings.SkillSecond, Settings.SkillThird, Settings.SkillFourth, Settings.SkillFifth, "1", "2", "3", "4", "5" }
+                        for _, s in ipairs(skills) do
+                            local sStr = tostring(s or "")
+                            if sStr ~= "" then
+                                local btn = GetSkillButton(sStr)
+                                if IsSkillReady(btn, sStr) then
+                                    CastSkill(sStr)
+                                    break
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -5119,14 +5423,14 @@ task.spawn(function()
     end
 end)
 
--- 5. VÒNG LẶP AUTO SKILL (MÔ PHỎNG PHÍM 1-5 & THỨ TỰ ƯU TIÊN + REMOTES + KHOẢNG CÁCH DISTANCETOSKILL)
+-- 5. VÒNG LẶP AUTO SKILL: CÓ CHIÊU NÀO DÙNG CHIÊU ĐÓ (SPAM SIÊU TỐC KHI SẴN SÀNG)
 task.spawn(function()
-    while task.wait(0.08) do
+    while task.wait(0.04) do
         if _G.VHT_SessionID ~= currentSessionID then break end
         if not CheckInGame() or IsLobby() then continue end
         local hasOther = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
         if hasOther then continue end
-        if not (Settings.AutoSkill or Settings.AutoPlay or Settings.AutoJoinMap) then continue end
+        if not (Settings.AutoSkill or Settings.AutoPlay or Settings.AutoJoinMap or Settings.SelectAttackMethod == "Skill") then continue end
 
         local myHum = GetMyHumanoid()
         local myRoot = GetMyRoot()
@@ -5142,30 +5446,48 @@ task.spawn(function()
             end
 
             if inRange then
-                -- Thứ tự chuẩn: SkillFirst (5) -> SkillSecond (4) -> SkillThird (1) -> SkillFourth (2) -> SkillFifth (3) -> Assist -> Fruit
+                -- Danh sách thứ tự ưu tiên cấu hình: SkillFirst -> Second -> Third -> Fourth -> Fifth
                 local skillOrder = {
-                    Settings.SkillFirst or "5",
-                    Settings.SkillSecond or "4",
-                    Settings.SkillThird or "1",
-                    Settings.SkillFourth or "2",
-                    Settings.SkillFifth or "3"
+                    tostring(Settings.SkillFirst or "5"),
+                    tostring(Settings.SkillSecond or "4"),
+                    tostring(Settings.SkillThird or "1"),
+                    tostring(Settings.SkillFourth or "2"),
+                    tostring(Settings.SkillFifth or "3")
                 }
 
+                -- Bổ sung đầy đủ các slot 1-5 để quét toàn diện không bỏ sót chiêu nào
+                local seen = {}
+                for _, s in ipairs(skillOrder) do seen[s] = true end
+                for _, s in ipairs({"1", "2", "3", "4", "5"}) do
+                    if not seen[s] then table.insert(skillOrder, s) end
+                end
+
+                -- CƠ CHẾ: CÓ CHIÊU NÀO DÙNG CHIÊU ĐÓ
+                -- Duyệt qua từng chiêu: Nếu chiêu nào sẵn sàng (hồi chiêu xong) thì xả ngay!
                 for _, skillNum in ipairs(skillOrder) do
-                    CastSkill(skillNum)
-                    task.wait(0.015)
+                    local btn = GetSkillButton(skillNum)
+                    if IsSkillReady(btn, skillNum) then
+                        CastSkill(skillNum)
+                        task.wait(0.02)
+                    end
                 end
 
-                -- Kế tiếp: Kích hoạt Skill Phụ (Assist Skill)
+                -- Kế tiếp: Kích hoạt Skill Phụ (Assist Skill) nếu có chiêu
                 if Settings.AutoAssistSkill or Settings.AutoPlay then
-                    UseAssistSkill()
-                    task.wait(0.015)
+                    local assistBtn = GetSkillButton("assist")
+                    if IsSkillReady(assistBtn, "assist") then
+                        UseAssistSkill()
+                        task.wait(0.02)
+                    end
                 end
 
-                -- Kế tiếp: Kích hoạt Fruit Skill
+                -- Kế tiếp: Kích hoạt Fruit Skill nếu có chiêu
                 if Settings.AutoFruitSkill or Settings.AutoPlay then
-                    UseFruitSkill()
-                    task.wait(0.015)
+                    local fruitBtn = GetSkillButton("fruit")
+                    if IsSkillReady(fruitBtn, "fruit") then
+                        UseFruitSkill()
+                        task.wait(0.02)
+                    end
                 end
             end
         end
@@ -5173,9 +5495,55 @@ task.spawn(function()
 end)
 
 
--- 6. VÒNG LẶP AUTO DODGE SKILL (DÙNG TRỰC TIẾP RADIUS STUDS VÀ CHECK NÉ NGƯỜI CHƠI)
+-- HÀM KÍCH HOẠT DASH ĐỂ NÉ CHIÊU (HỖ TRỢ CẢ PC & MOBILE)
+local function TriggerDodgeDash()
+    pcall(function()
+        if VirtualInputManager and VirtualInputManager.SendKeyEvent then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
+            task.delay(0.02, function()
+                pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Q, false, game) end)
+            end)
+        elseif keypress and keyrelease then
+            keypress(Enum.KeyCode.Q.Value)
+            task.delay(0.02, function()
+                pcall(function() keyrelease(Enum.KeyCode.Q.Value) end)
+            end)
+        end
+    end)
+    pcall(function()
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if pg then
+            for _, gui in ipairs(pg:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Enabled and not gui.Name:lower():find("orion") and not gui.Name:lower():find("vht") then
+                    for _, btn in ipairs(gui:GetDescendants()) do
+                        if (btn:IsA("ImageButton") or btn:IsA("TextButton")) and btn.Visible then
+                            local bName = btn.Name:lower()
+                            if bName == "dash" or bName == "dashbtn" or bName == "dashbutton" then
+                                ClickSkillButton(btn)
+                                return
+                            end
+                            if btn:IsA("TextButton") and btn.Text:lower():find("dash") then
+                                ClickSkillButton(btn)
+                                return
+                            end
+                            for _, ch in ipairs(btn:GetChildren()) do
+                                if ch:IsA("TextLabel") and ch.Text:lower():find("dash") then
+                                    ClickSkillButton(btn)
+                                    return
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- 6. VÒNG LẶP AUTO DODGE SKILL: NÉ CHIÊU THÔNG MINH, ỔN ĐỊNH & CHỐNG VĂNG LÊN TRỜI
+local lastDodgeTick = 0
 task.spawn(function()
-    while task.wait(math.max(tonumber(Settings.TweenSpeedDodgePart) or 0.15, 0.05)) do
+    while task.wait(0.05) do
         if _G.VHT_SessionID ~= currentSessionID then break end
         if not CheckInGame() or IsLobby() then continue end
         if Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1 then
@@ -5183,58 +5551,134 @@ task.spawn(function()
         end
         local myHum = GetMyHumanoid()
         local myRoot = GetMyRoot()
-        if Settings.AutoDodgeSkill and myHum and myHum.Health > 0 and myRoot then
-            local dodgeRadius = tonumber(Settings.SizeDodgePart) or 25
-            local candidates = {}
-            for _, obj in pairs(workspace:GetChildren()) do
-                table.insert(candidates, obj)
-            end
-            local fx = workspace:FindFirstChild("Effects")
-            if fx then
-                for _, obj in pairs(fx:GetChildren()) do table.insert(candidates, obj) end
-            end
-            local warnFolder = workspace:FindFirstChild("Warnings")
-            if warnFolder then
-                for _, obj in pairs(warnFolder:GetChildren()) do table.insert(candidates, obj) end
-            end
-            for _, obj in pairs(candidates) do
-                if obj:IsA("BasePart") and (obj.Name:find("Warning") or (obj.Color == Color3.fromRGB(255, 0, 0) and obj.Transparency < (Settings.DodgePartTransparency or 0.9))) then
-                    local dist = (myRoot.Position - obj.Position).Magnitude
-                    if dist < dodgeRadius then
-                        if not isDodging then
-                            isDodging = true
-                            _G.VHT_IsDodging = true
-                            pcall(function()
-                                local prevCF = myRoot.CFrame
-                                local dodgeHeight = tonumber(Settings.SizeDodgePartY) or 100
-                                -- Tính độ cao an toàn cố định từ vị trí hiện tại, tránh cộng dồn liên tiếp lên trời
-                                local safeY = prevCF.Position.Y + dodgeHeight
-                                myRoot.CFrame = CFrame.new(myRoot.Position.X, safeY, myRoot.Position.Z)
+        local myChar = GetMyChar()
 
-                                -- Giữ nguyên lực nâng BodyVelocity chống rơi tự do khi đang né trên không
-                                local bv = myRoot:FindFirstChild("FarmBV")
-                                if not bv then
-                                    bv = Instance.new("BodyVelocity")
-                                    bv.Name = "FarmBV"
-                                    bv.MaxForce = Vector3.new(100000, 100000, 100000)
-                                    bv.Velocity = Vector3.zero
-                                    bv.Parent = myRoot
-                                else
-                                    bv.Velocity = Vector3.zero
+        if Settings.AutoDodgeSkill and myHum and myHum.Health > 0 and myRoot and myChar then
+            local dodgeRadiusSetting = tonumber(Settings.SizeDodgePart) or 25
+            local dodgeHeightSetting = math.clamp(tonumber(Settings.SizeDodgePartY) or 22, 14, 32)
+            local myPos = myRoot.Position
+
+            -- Thu thập các đối tượng cảnh báo chiêu đỏ (Warning / Indicators / Effects)
+            local dangerObjects = {}
+            local searchContainers = {
+                workspace:FindFirstChild("Warnings"),
+                workspace:FindFirstChild("Effects"),
+                workspace:FindFirstChild("Indicators"),
+                workspace:FindFirstChild("Spells"),
+                workspace:FindFirstChild("Debris"),
+                workspace
+            }
+
+            for _, container in ipairs(searchContainers) do
+                if container then
+                    for _, obj in ipairs(container:GetChildren()) do
+                        if obj:IsA("BasePart") then
+                            table.insert(dangerObjects, obj)
+                        elseif obj:IsA("Model") or obj:IsA("Folder") then
+                            local oName = obj.Name:lower()
+                            if oName:find("warn") or oName:find("effect") or oName:find("indicat") or oName:find("spell") or oName:find("aoe") or oName:find("skill") or oName:find("red") then
+                                for _, sub in ipairs(obj:GetChildren()) do
+                                    if sub:IsA("BasePart") then
+                                        table.insert(dangerObjects, sub)
+                                    end
                                 end
-
-                                task.wait(0.5)
-
-                                if not (Settings.AutoMob or Settings.AutoPlay) and myRoot and myRoot.Parent then
-                                    myRoot.CFrame = prevCF
-                                end
-                            end)
-                            isDodging = false
-                            _G.VHT_IsDodging = false
+                            end
                         end
-                        break
                     end
                 end
+            end
+
+            -- Tìm part nguy hiểm gần nhất đe dọa người chơi
+            local activeDangerPart = nil
+            local minDangerDist = math.huge
+
+            for _, part in ipairs(dangerObjects) do
+                if part and part.Parent and not part:IsDescendantOf(myChar) and not Players:GetPlayerFromCharacter(part.Parent) then
+                    local pName = part.Name:lower()
+                    local col = part.Color
+                    local isRedColor = (col.R > 0.6 and col.G < 0.45 and col.B < 0.45) or (part.BrickColor and part.BrickColor.Name:lower():find("red"))
+                    local isWarningName = pName:find("warn") or pName:find("indicat") or pName:find("red") or pName:find("danger") or pName:find("circle") or pName:find("telegraph") or pName:find("hitbox")
+
+                    local isCandidate = (part.Transparency < 0.95) and (isRedColor or isWarningName)
+                    if isCandidate then
+                        local partPos = part.Position
+                        local hDist = (Vector2.new(myPos.X, myPos.Z) - Vector2.new(partPos.X, partPos.Z)).Magnitude
+                        local vDiff = myPos.Y - partPos.Y
+
+                        -- Tính bán kính nguy hiểm từ kích thước thực tế của part
+                        local partRadius = math.max(part.Size.X, part.Size.Z) / 2
+                        local safeRadius = math.max(partRadius + 4, dodgeRadiusSetting)
+
+                        -- Kiểm tra xem người chơi có đang nằm trong vùng đỏ (khoảng cách ngang < bán kính & độ cao < 15 studs)
+                        if hDist < safeRadius and vDiff > -5 and vDiff < 14 then
+                            if hDist < minDangerDist then
+                                minDangerDist = hDist
+                                activeDangerPart = part
+                            end
+                        end
+                    end
+                end
+            end
+
+            if activeDangerPart then
+                local now = os.clock()
+                if now - lastDodgeTick >= 0.1 then
+                    lastDodgeTick = now
+                    isDodging = true
+                    _G.VHT_IsDodging = true
+
+                    pcall(function()
+                        local partPos = activeDangerPart.Position
+                        -- Tính độ cao an toàn cố định dựa trên mặt sàn của chiêu đỏ (KHÔNG CỘNG DỒN VĂNG LÊN TRỜI)
+                        local safeY = partPos.Y + dodgeHeightSetting
+
+                        -- Tính hướng né lướt ra ngoài viền vòng đỏ
+                        local dir = (Vector2.new(myPos.X, myPos.Z) - Vector2.new(partPos.X, partPos.Z))
+                        local dirUnit
+                        if dir.Magnitude < 0.1 then
+                            dirUnit = Vector2.new(0, 1)
+                        else
+                            dirUnit = dir.Unit
+                        end
+
+                        local partRadius = math.max(activeDangerPart.Size.X, activeDangerPart.Size.Z) / 2
+                        local targetHorizontal = Vector2.new(partPos.X, partPos.Z) + dirUnit * (partRadius + 6)
+                        local safeCF = CFrame.new(targetHorizontal.X, safeY, targetHorizontal.Y)
+
+                        -- Kích hoạt Dash nếu có
+                        TriggerDodgeDash()
+
+                        -- Dịch chuyển / Lướt nhẹ đến vị trí an toàn trên không
+                        if myChar.PrimaryPart then pcall(function() myChar:PivotTo(safeCF) end) end
+                        myRoot.CFrame = safeCF
+
+                        -- Giữ BodyVelocity ổn định chống rơi
+                        local bv = myRoot:FindFirstChild("FarmBV")
+                        if not bv then
+                            bv = Instance.new("BodyVelocity")
+                            bv.Name = "FarmBV"
+                            bv.MaxForce = Vector3.new(1000000, 1000000, 1000000)
+                            bv.Velocity = Vector3.zero
+                            bv.Parent = myRoot
+                        else
+                            bv.Velocity = Vector3.zero
+                        end
+                    end)
+
+                    task.wait(0.25)
+                    isDodging = false
+                    _G.VHT_IsDodging = false
+                end
+            else
+                if isDodging then
+                    isDodging = false
+                    _G.VHT_IsDodging = false
+                end
+            end
+        else
+            if isDodging then
+                isDodging = false
+                _G.VHT_IsDodging = false
             end
         end
     end
@@ -5790,22 +6234,70 @@ end
 function GetPlayerLevel()
     local level = 1
     pcall(function()
-        local searchFolders = { "leaderstats", "Data", "Stats", "PlayerData", "PlayerStats" }
-        for _, name in ipairs(searchFolders) do
-            local f = LocalPlayer:FindFirstChild(name)
-            if f and f:FindFirstChild("Level") then
-                level = tonumber(f.Level.Value) or level
+        -- 1. Check Attributes on LocalPlayer
+        for _, attr in ipairs({"Level", "Lvl", "level", "lvl", "PlayerLevel"}) do
+            local a = LocalPlayer:GetAttribute(attr)
+            if a and tonumber(a) and tonumber(a) > 0 then
+                level = tonumber(a)
                 return
             end
         end
-        if LocalPlayer:FindFirstChild("Level") then
-            level = tonumber(LocalPlayer.Level.Value) or level
-            return
+
+        -- 2. Check Folders inside LocalPlayer
+        local searchFolders = { "leaderstats", "Data", "Stats", "PlayerData", "PlayerStats", "Inventory" }
+        for _, name in ipairs(searchFolders) do
+            local f = LocalPlayer:FindFirstChild(name)
+            if f then
+                for _, lName in ipairs({"Level", "Lvl", "level", "lvl", "PlayerLevel"}) do
+                    local v = f:FindFirstChild(lName)
+                    if v and (v:IsA("ValueBase") or type(v.Value) == "number") then
+                        local n = tonumber(v.Value)
+                        if n and n > 0 then level = n; return end
+                    end
+                end
+            end
         end
-        local lvlLabel = LocalPlayer.PlayerGui:FindFirstChild("Level", true)
-        if lvlLabel and lvlLabel:IsA("TextLabel") then
-            local n = tonumber(lvlLabel.Text:match("%d+"))
-            if n then level = n return end
+
+        -- 3. Check direct children in LocalPlayer
+        for _, lName in ipairs({"Level", "Lvl", "level", "lvl", "PlayerLevel"}) do
+            local v = LocalPlayer:FindFirstChild(lName)
+            if v and (v:IsA("ValueBase") or type(v.Value) == "number") then
+                local n = tonumber(v.Value)
+                if n and n > 0 then level = n; return end
+            end
+        end
+
+        -- 4. Check ReplicatedStorage PlayerData
+        local repPlayerData = ReplicatedStorage:FindFirstChild("PlayerData") or ReplicatedStorage:FindFirstChild("Players") or ReplicatedStorage:FindFirstChild("PlayerStats")
+        if repPlayerData then
+            local myData = repPlayerData:FindFirstChild(LocalPlayer.Name) or repPlayerData:FindFirstChild(tostring(LocalPlayer.UserId))
+            if myData then
+                for _, lName in ipairs({"Level", "Lvl", "level", "lvl", "PlayerLevel"}) do
+                    local v = myData:FindFirstChild(lName)
+                    if v and (v:IsA("ValueBase") or type(v.Value) == "number") then
+                        local n = tonumber(v.Value)
+                        if n and n > 0 then level = n; return end
+                    end
+                end
+            end
+        end
+
+        -- 5. Quét PlayerGui tìm TextLabel hiển thị Level
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if pg then
+            for _, desc in ipairs(pg:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Visible then
+                    local dName = desc.Name:lower()
+                    local txt = desc.Text
+                    if dName:find("lvl") or dName:find("level") or dName == "lv" or txt:lower():find("lv") or txt:lower():find("level") then
+                        local n = tonumber(txt:match("[Ll][Vv]%.?%s*(%d+)") or txt:match("[Ll]evel%s*[:.]?%s*(%d+)") or txt:match("(%d+)"))
+                        if n and n > 0 and n < 1000 then
+                            level = n
+                            return
+                        end
+                    end
+                end
+            end
         end
     end)
     return level
@@ -5901,7 +6393,8 @@ end
 
 -- HÀM TỰ ĐỘNG CHỌN ĐỘ KHÓ PHÙ HỢP NHẤT THEO CẤP ĐỘ VÀ SỨC MẠNH
 function GetBestDifficulty(mapName)
-    if not Settings.AutoSelectMap and Settings.SelectDifficulty and Settings.SelectDifficulty ~= "Auto" and Settings.SelectDifficulty ~= "" then
+    -- Nếu người dùng tự chọn độ khó cụ thể trong Dropdown (Nightmare / Hard / Easy), luôn tôn trọng lựa chọn đó
+    if Settings.SelectDifficulty and Settings.SelectDifficulty ~= "Auto" and Settings.SelectDifficulty ~= "" then
         return Settings.SelectDifficulty
     end
 
@@ -5919,16 +6412,13 @@ function GetBestDifficulty(mapName)
     local reqHard = mapMinLevel + 5
     local reqNightmare = mapMinLevel + 10
 
-    -- Ngưỡng sức mạnh an toàn theo từng độ khó:
-    -- Easy: Cấp độ mở map (mapMinLevel)
-    -- Hard: Cấp độ mapMinLevel + 5 và Sức mạnh >= reqHard * 80
-    -- Nightmare: Cấp độ mapMinLevel + 10 và Sức mạnh >= reqNightmare * 90
-    local powerReqHard = reqHard * 80
-    local powerReqNightmare = reqNightmare * 90
-
-    if currentLevel >= reqNightmare and currentPower >= powerReqNightmare then
+    -- Phân cấp độ khó tự động theo cấp độ thực tế:
+    -- Nightmare: Cấp độ >= mapMinLevel + 10
+    -- Hard: Cấp độ >= mapMinLevel + 5
+    -- Easy: Cấp độ cơ bản
+    if currentLevel >= reqNightmare then
         return "Nightmare"
-    elseif currentLevel >= reqHard and currentPower >= powerReqHard then
+    elseif currentLevel >= reqHard then
         return "Hard"
     else
         return "Easy"
@@ -5937,34 +6427,17 @@ end
 
 -- HÀM TỰ ĐỘNG CHỌN MAP THÔNG MINH THEO CẢ CẤP ĐỘ VÀ SỨC MẠNH
 function GetBestMapName()
-    if not Settings.AutoSelectMap and Settings.MapSelection and Settings.MapSelection ~= "Auto" and Settings.MapSelection ~= "" then
+    -- Nếu người dùng tự chọn một map cụ thể trong Dropdown và KHÔNG bật AutoSelectMap:
+    if not Settings.AutoSelectMap and not Settings.AutoJoinMap and Settings.MapSelection and Settings.MapSelection ~= "Auto" and Settings.MapSelection ~= "" then
         return Settings.MapSelection
     end
 
     local currentLevel = GetPlayerLevel()
-    local currentPower = GetPlayerPower()
     local bestMap = "Titan Dimension"
-    local highestUnlockedIndex = 1
 
-    for i, dim in ipairs(dimensionLevels) do
+    for _, dim in ipairs(dimensionLevels) do
         if currentLevel >= dim.minLevel then
-            highestUnlockedIndex = i
             bestMap = dim.name
-        end
-    end
-
-    -- THUẬT TOÁN AN TOÀN SỨC MẠNH:
-    -- Nếu vừa lên cấp mở map mới (level chỉ vừa chạm minLevel hoặc minLevel + 1)
-    -- nhưng chỉ số sức mạnh nhân vật quá yếu (chưa đủ card/trang bị, power < minLevel * 75)
-    -- hệ thống sẽ tự động chọn map trước đó (nơi có thể đi Nightmare mượt mà)
-    -- để tiếp tục farm EXP và Card xịn, tránh việc vào map mới bị quái hạ gục liên tục!
-    if highestUnlockedIndex > 1 then
-        local currentDim = dimensionLevels[highestUnlockedIndex]
-        local prevDim = dimensionLevels[highestUnlockedIndex - 1]
-        local safePowerThreshold = currentDim.minLevel * 75
-
-        if currentLevel < currentDim.minLevel + 2 and currentPower < safePowerThreshold then
-            bestMap = prevDim.name
         end
     end
 
@@ -6012,7 +6485,7 @@ local function IsExcludedFromDimension(obj)
     return false
 end
 
-local function FindPortalPart(mapName)
+FindPortalPart = function(mapName)
     local targetClean = mapName:lower():gsub(" dimension", ""):gsub(" ", "")
     local targetFull = mapName:lower():gsub(" ", "")
     if portalCache[targetClean] and portalCache[targetClean].Parent then
@@ -6284,7 +6757,7 @@ task.spawn(function()
                             end
                         end)
 
-                        -- 3. Tự động chọn tab độ khó (Nightmare / Hard / Easy) và click các nút Start / Create / Solo trên GUI
+                        -- 3. Tự động chọn Map, chọn Độ Khó (Nightmare / Hard / Easy) và Bắt Đầu Trận Đấu
                         pcall(function()
                             task.wait(0.3)
                             local pg = LocalPlayer:FindFirstChild("PlayerGui")
@@ -6311,27 +6784,35 @@ task.spawn(function()
                                 end
                             end
 
+                            local function GetBtnText(btn)
+                                local texts = {}
+                                if btn:IsA("TextButton") and btn.Text ~= "" then
+                                    table.insert(texts, btn.Text:lower())
+                                end
+                                for _, child in ipairs(btn:GetChildren()) do
+                                    if child:IsA("TextLabel") and child.Text ~= "" then
+                                        table.insert(texts, child.Text:lower())
+                                    end
+                                end
+                                return table.concat(texts, " ")
+                            end
+
+                            local candidateButtons = {}
                             for _, gui in ipairs(pg:GetChildren()) do
                                 if gui:IsA("ScreenGui") and gui.Enabled then
                                     local gName = gui.Name:lower()
-                                    -- Bỏ qua GUI của Hub và thanh điều hướng chính (HUD / Main / Lobby) và BỎ QUA GUI CỦA CHẾ ĐỘ INFINITE
                                     local isBlockedGui = gName:find("orion", 1, true) or gName:find("vht", 1, true) or gName:find("slh", 1, true)
                                         or gName:find("infinite", 1, true) or (gName:find("inf", 1, true) and not gName:find("info", 1, true))
                                     if not isBlockedGui then
                                         for _, btn in ipairs(gui:GetDescendants()) do
                                             if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible and IsGuiElementReallyVisible(btn) then
                                                 local bName = btn.Name:lower()
-                                                local bText = (btn:IsA("TextButton") and btn.Text:lower()) or ""
+                                                local bText = GetBtnText(btn)
 
-                                                -- TUYỆT ĐỐI KHÔNG CLICK NÚT "PLAY" TRÊN HUD SẢNH (Khắc phục triệt để lỗi tự bấm làm mất menu map)
                                                 local isLobbyPlayButton = bName == "play" or bName == "playbutton" or bName == "playbtn"
                                                     or bText == "play" or bText == "chơi"
                                                     or (bName:find("play", 1, true) and (gName:find("main") or gName:find("hud") or gName:find("lobby") or gName:find("bar")))
-                                                if isLobbyPlayButton then
-                                                    continue
-                                                end
 
-                                                -- TUYỆT ĐỐI KHÔNG CLICK VÀO CÁC NÚT INFINITE MODE HOẶC CÁC NÚT MUA SẮM
                                                 local isDangerous = bName:find("buy", 1, true) or bText:find("buy", 1, true)
                                                     or bName:find("purchase", 1, true) or bText:find("purchase", 1, true)
                                                     or bName:find("robux", 1, true) or bText:find("robux", 1, true)
@@ -6340,49 +6821,61 @@ task.spawn(function()
                                                     or bName:find("close", 1, true) or bText == "x" or bText == "close"
                                                     or bName:find("infinite", 1, true) or bText:find("infinite", 1, true)
                                                     or bText == "inf" or bName == "inf"
-                                                if isDangerous then
-                                                    continue
-                                                end
 
-                                                -- 3a. Ưu tiên click nút chọn Độ Khó tối ưu trên giao diện phòng
-                                                local diffLower = (targetDifficulty or "Easy"):lower()
-                                                if bText == diffLower or bName == diffLower or bText:find(diffLower, 1, true) or bName:find(diffLower, 1, true) then
-                                                    ClickButtonOnce(btn)
-                                                end
-
-                                                -- 3b. Tự động click các nút Bắt đầu trận đấu (Start / Create / Solo / Ready / Confirm)
-                                                -- TUYỆT ĐỐI KHÔNG chứa "play" để tránh xung đột với nút Play mở map của người chơi
-                                                local isStartMatch = bText:find("start", 1, true) or bText:find("create", 1, true)
-                                                    or bText:find("solo", 1, true) or bText:find("ready", 1, true)
-                                                    or bText:find("confirm", 1, true)
-                                                    or bName:find("start", 1, true) or bName:find("create", 1, true)
-                                                    or bName:find("solo", 1, true) or bName:find("ready", 1, true)
-                                                    or bName:find("confirm", 1, true)
-
-                                                if isStartMatch then
-                                                    ClickButtonOnce(btn)
-                                                end
-
-                                                -- 3c. Chọn tab Dimension / Story nếu giao diện có chia tab chế độ
-                                                local isDimTab = (bText == "dimension" or bName == "dimension" or bText == "dimensions" or bName == "dimensions" or bText == "story" or bName == "story")
-                                                if isDimTab then
-                                                    ClickButtonOnce(btn)
-                                                end
-
-                                                -- 3d. Click chọn card Map nếu danh sách Dimension đang mở
-                                                local mapClean = targetMap:lower():gsub(" dimension", ""):gsub(" ", "")
-                                                if mapClean ~= "" then
-                                                    local bClean = bText:gsub(" ", "")
-                                                    local bnClean = bName:gsub(" ", "")
-                                                    if not isStartMatch and not (bText == diffLower or bName == diffLower) then
-                                                        if bClean == mapClean or bnClean == mapClean then
-                                                            ClickButtonOnce(btn)
-                                                        end
-                                                    end
+                                                if not isLobbyPlayButton and not isDangerous then
+                                                    table.insert(candidateButtons, { btn = btn, name = bName, text = bText })
                                                 end
                                             end
                                         end
                                     end
+                                end
+                            end
+
+                            -- BƯỚC 1: Chọn tab Dimension hoặc Card Map tương ứng
+                            local mapClean = targetMap:lower():gsub(" dimension", ""):gsub(" ", "")
+                            for _, item in ipairs(candidateButtons) do
+                                local bText = item.text
+                                local bName = item.name
+                                if bText == "dimension" or bName == "dimension" or bText == "dimensions" or bName == "dimensions" or bText == "story" or bName == "story" then
+                                    ClickButtonOnce(item.btn)
+                                end
+                                if mapClean ~= "" then
+                                    local bClean = bText:gsub(" ", "")
+                                    local bnClean = bName:gsub(" ", "")
+                                    if bClean == mapClean or bnClean == mapClean or bClean == mapClean .. "dimension" or bnClean == mapClean .. "dimension" then
+                                        ClickButtonOnce(item.btn)
+                                    end
+                                end
+                            end
+
+                            task.wait(0.15)
+
+                            -- BƯỚC 2: Chọn Độ Khó tối ưu (Nightmare / Hard / Easy)
+                            local diffLower = (targetDifficulty or "Easy"):lower()
+                            for _, item in ipairs(candidateButtons) do
+                                local bText = item.text
+                                local bName = item.name
+                                if bText == diffLower or bName == diffLower or bText:find(diffLower, 1, true) or bName:find(diffLower, 1, true) then
+                                    ClickButtonOnce(item.btn)
+                                end
+                            end
+
+                            task.wait(0.15)
+
+                            -- BƯỚC 3: Bấm Bắt Đầu Trận Đấu (Start / Create / Solo / Ready / Confirm)
+                            for _, item in ipairs(candidateButtons) do
+                                local bText = item.text
+                                local bName = item.name
+                                local isStartMatch = bText:find("start", 1, true) or bText:find("create", 1, true)
+                                    or bText:find("solo", 1, true) or bText:find("ready", 1, true)
+                                    or bText:find("confirm", 1, true)
+                                    or bName:find("start", 1, true) or bName:find("create", 1, true)
+                                    or bName:find("solo", 1, true) or bName:find("ready", 1, true)
+                                    or bName:find("confirm", 1, true)
+
+                                if isStartMatch then
+                                    ClickButtonOnce(item.btn)
+                                    break
                                 end
                             end
                         end)
