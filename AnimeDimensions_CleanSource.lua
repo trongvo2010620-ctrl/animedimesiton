@@ -2603,6 +2603,11 @@ local function ApplyLanguage(newLang)
 end
 
 -- ===================================================================
+local GetPlayerLevel
+local GetPlayerPower
+local GetBestMapName
+local GetBestDifficulty
+
 local MainTab = Window:MakeTab({ Name = T("Main"),
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
@@ -2611,8 +2616,38 @@ local MainTab = Window:MakeTab({ Name = T("Main"),
 MainTab:AddSection({ Name = T("Farming") })
 
 local ToggleAutoMob, ToggleAutoMelee, ToggleKillAura, ToggleAutoSkill, ToggleAutoAssistSkill, ToggleAutoFruitSkill, ToggleAutoReplay, ToggleAutoSelectMap
+local DropdownMapSelection, DropdownSelectDifficulty
 
-MainTab:AddDropdown({ Name = T("MapSelection(AutoUpdate!)"),
+ToggleAutoSelectMap = MainTab:AddToggle({ Name = T("AutoSelectMap(DetectedLevel)"),
+    Default = Settings.AutoSelectMap,
+    Callback = function(v)
+        Settings.AutoSelectMap = v
+        if uiBuilding then return end
+        if v then
+            local bestMap = GetBestMapName and GetBestMapName() or "Titan Dimension"
+            local bestDiff = GetBestDifficulty and GetBestDifficulty(bestMap) or "Easy"
+            local curLvl = GetPlayerLevel and GetPlayerLevel() or 1
+            local curPwr = GetPlayerPower and GetPlayerPower() or 0
+            if DropdownMapSelection and DropdownMapSelection.Set then
+                pcall(function() DropdownMapSelection:Set(bestMap) end)
+            end
+            if DropdownSelectDifficulty and DropdownSelectDifficulty.Set then
+                pcall(function() DropdownSelectDifficulty:Set(bestDiff) end)
+            end
+            pcall(function()
+                OrionLib:MakeNotification({
+                    Name = "🎯 Auto Farm Theo Level",
+                    Content = "Level: " .. tostring(curLvl) .. " | Sức Mạnh: " .. tostring(curPwr) .. "\n-> Map: " .. tostring(bestMap) .. " (" .. tostring(bestDiff) .. ")",
+                    Image = "rbxassetid://4483345998",
+                    Time = 4
+                })
+            end)
+        end
+        AutoSave()
+    end
+})
+
+DropdownMapSelection = MainTab:AddDropdown({ Name = T("MapSelection(AutoUpdate!)"),
     Default = Settings.MapSelection,
     Options = { "Auto", "Titan Dimension", "Demon Dimension", "Curse Dimension", "Villain Dimension", "Sword Dimension", "Ghoul Dimension", "Fate Dimension", "Slime Dimension", "Devil Dimension", "Pirate Dimension", "Alien Dimension", "Giant Dimension", "Shadow Dimension", "Esper Dimension", "Soul Dimension" },
     Callback = function(v)
@@ -2621,7 +2656,7 @@ MainTab:AddDropdown({ Name = T("MapSelection(AutoUpdate!)"),
     end
 })
 
-MainTab:AddDropdown({ Name = T("SelectDifficulty"),
+DropdownSelectDifficulty = MainTab:AddDropdown({ Name = T("SelectDifficulty"),
     Default = Settings.SelectDifficulty or "Auto",
     Options = { "Auto", "Nightmare", "Hard", "Easy" },
     Callback = function(v)
@@ -2754,14 +2789,6 @@ MainTab:AddToggle({ Name = T("FriendOnly"),
     Default = Settings.FriendOnly,
     Callback = function(v)
         Settings.FriendOnly = v
-        AutoSave()
-    end
-})
-
-ToggleAutoSelectMap = MainTab:AddToggle({ Name = T("AutoSelectMap(DetectedLevel)"),
-    Default = Settings.AutoSelectMap,
-    Callback = function(v)
-        Settings.AutoSelectMap = v
         AutoSave()
     end
 })
@@ -5088,7 +5115,6 @@ local waveLabelCache = nil
 local lastWaveScanTick = 0
 local progressedThisMatch = false
 local progressedAtTime = 0
-local GetBestMapName
 
 task.spawn(function()
     while task.wait(1.5) do
@@ -5625,7 +5651,7 @@ local function HasInteract(part)
     return false
 end
 
-local function GetPlayerLevel()
+function GetPlayerLevel()
     local level = 1
     pcall(function()
         local searchFolders = { "leaderstats", "Data", "Stats", "PlayerData", "PlayerStats" }
@@ -5652,7 +5678,7 @@ end
 -- HÀM ĐO ĐẠC SỨC MẠNH NHÂN VẬT (COMBAT POWER / STATS / DAMAGE / CARDS)
 local lastPowerCacheTime = 0
 local cachedPowerValue = 0
-local function GetPlayerPower()
+function GetPlayerPower()
     local nowCache = os.clock()
     if cachedPowerValue > 0 and (nowCache - lastPowerCacheTime < 2) then
         return cachedPowerValue
@@ -5738,8 +5764,8 @@ local function GetPlayerPower()
 end
 
 -- HÀM TỰ ĐỘNG CHỌN ĐỘ KHÓ PHÙ HỢP NHẤT THEO CẤP ĐỘ VÀ SỨC MẠNH
-local function GetBestDifficulty(mapName)
-    if Settings.SelectDifficulty and Settings.SelectDifficulty ~= "Auto" and Settings.SelectDifficulty ~= "" then
+function GetBestDifficulty(mapName)
+    if not Settings.AutoSelectMap and Settings.SelectDifficulty and Settings.SelectDifficulty ~= "Auto" and Settings.SelectDifficulty ~= "" then
         return Settings.SelectDifficulty
     end
 
@@ -5835,6 +5861,21 @@ local function GetPortalInteractivePart(obj)
     return nil
 end
 
+local function IsExcludedFromDimension(obj)
+    if not obj then return true end
+    local cur = obj
+    while cur and cur ~= workspace and cur ~= game do
+        local n = cur.Name:lower()
+        if n:find("inf", 1, true) or n:find("infinite", 1, true)
+            or n:find("raid", 1, true) or n:find("boss", 1, true)
+            or n:find("speed", 1, true) or n:find("challenge", 1, true) then
+            return true
+        end
+        cur = cur.Parent
+    end
+    return false
+end
+
 local function FindPortalPart(mapName)
     local targetClean = mapName:lower():gsub(" dimension", ""):gsub(" ", "")
     local targetFull = mapName:lower():gsub(" ", "")
@@ -5852,16 +5893,18 @@ local function FindPortalPart(mapName)
         workspace
     }
 
-    -- Pass 1: Tìm Model / Folder / Part có tên trùng với targetClean hoặc targetFull
+    -- Pass 1: Tìm Model / Folder / Part có tên trùng với targetClean hoặc targetFull (TUYỆT ĐỐI LOẠI BỎ INFINITE/RAID)
     for _, container in ipairs(searchContainers) do
-        if container then
+        if container and not IsExcludedFromDimension(container) then
             for _, obj in ipairs(container:GetChildren()) do
-                local oName = obj.Name:lower():gsub(" ", "")
-                if oName == targetClean or oName == targetFull or oName == targetClean .. "portal" or oName == targetFull .. "portal" then
-                    local part = GetPortalInteractivePart(obj)
-                    if part then
-                        portalCache[targetClean] = part
-                        return part
+                if not IsExcludedFromDimension(obj) then
+                    local oName = obj.Name:lower():gsub(" ", "")
+                    if oName == targetClean or oName == targetFull or oName == targetClean .. "portal" or oName == targetFull .. "portal" then
+                        local part = GetPortalInteractivePart(obj)
+                        if part and not IsExcludedFromDimension(part) then
+                            portalCache[targetClean] = part
+                            return part
+                        end
                     end
                 end
             end
@@ -5870,14 +5913,16 @@ local function FindPortalPart(mapName)
 
     -- Pass 2: Quét toàn bộ Descendants tìm obj có tên chứa từ khóa
     for _, container in ipairs(searchContainers) do
-        if container then
+        if container and not IsExcludedFromDimension(container) then
             for _, obj in ipairs(container:GetDescendants()) do
-                local oName = obj.Name:lower():gsub(" ", "")
-                if oName:find(targetClean, 1, true) or oName:find(targetFull, 1, true) then
-                    local part = GetPortalInteractivePart(obj)
-                    if part then
-                        portalCache[targetClean] = part
-                        return part
+                if not IsExcludedFromDimension(obj) then
+                    local oName = obj.Name:lower():gsub(" ", "")
+                    if oName:find(targetClean, 1, true) or oName:find(targetFull, 1, true) then
+                        local part = GetPortalInteractivePart(obj)
+                        if part and not IsExcludedFromDimension(part) then
+                            portalCache[targetClean] = part
+                            return part
+                        end
                     end
                 end
             end
@@ -5894,14 +5939,16 @@ local function FindPortalPart(mapName)
     end
     for _, kw in ipairs(keywords) do
         for _, container in ipairs(searchContainers) do
-            if container then
+            if container and not IsExcludedFromDimension(container) then
                 for _, obj in ipairs(container:GetDescendants()) do
-                    local oName = obj.Name:lower():gsub(" ", "")
-                    if oName:find(kw, 1, true) then
-                        local part = GetPortalInteractivePart(obj)
-                        if part then
-                            portalCache[targetClean] = part
-                            return part
+                    if not IsExcludedFromDimension(obj) then
+                        local oName = obj.Name:lower():gsub(" ", "")
+                        if oName:find(kw, 1, true) then
+                            local part = GetPortalInteractivePart(obj)
+                            if part and not IsExcludedFromDimension(part) then
+                                portalCache[targetClean] = part
+                                return part
+                            end
                         end
                     end
                 end
@@ -5909,15 +5956,32 @@ local function FindPortalPart(mapName)
         end
     end
 
-    -- Pass 4: Fallback - Tìm bất kỳ Portal / Elevator nào trong sảnh có ProximityPrompt hoặc Touch
+    -- Pass 4: Fallback - Tìm thang máy thường (Elevator) KHÔNG PHẢI Infinite Mode
+    local lobbyElevators = workspace:FindFirstChild("LobbyElevators") or workspace:FindFirstChild("Elevators") or workspace:FindFirstChild("Portals")
+    if lobbyElevators then
+        for _, child in ipairs(lobbyElevators:GetChildren()) do
+            if not IsExcludedFromDimension(child) then
+                local p = GetPortalInteractivePart(child)
+                if p and not IsExcludedFromDimension(p) then
+                    portalCache[targetClean] = p
+                    return p
+                end
+            end
+        end
+    end
+
     for _, container in ipairs(searchContainers) do
-        if container then
+        if container and not IsExcludedFromDimension(container) then
             for _, obj in ipairs(container:GetDescendants()) do
-                if obj:IsA("BasePart") and HasInteract(obj) then
+                if not IsExcludedFromDimension(obj) and (obj:IsA("BasePart") or obj:IsA("Model")) then
                     local oName = obj.Name:lower()
-                    if oName:find("portal") or oName:find("elevator") or oName:find("enter") or oName:find("dungeon") then
-                        portalCache[targetClean] = obj
-                        return obj
+                    if (oName:find("portal") or oName:find("elevator") or oName:find("enter") or oName:find("dungeon"))
+                        and not (oName:find("inf") or oName:find("raid") or oName:find("boss")) then
+                        local p = GetPortalInteractivePart(obj)
+                        if p and not IsExcludedFromDimension(p) then
+                            portalCache[targetClean] = p
+                            return p
+                        end
                     end
                 end
             end
@@ -5928,7 +5992,7 @@ local function FindPortalPart(mapName)
 end
 
 local isJoining = false
-local hasWaitedLobby = false
+local hasWaitedLobby = true
 local raidJoinFails = 0
 task.spawn(function()
     while task.wait(1.5) do
@@ -5945,7 +6009,7 @@ task.spawn(function()
             end
 
             local hasMapSelection = (Settings.MapSelection and Settings.MapSelection ~= "" and Settings.MapSelection ~= "Auto")
-            local shouldJoin = (Settings.AutoPlay and (Settings.AutoSelectMap or hasMapSelection))
+            local shouldJoin = Settings.AutoPlay
                 or Settings.AutoSelectMap
                 or Settings.AutoRaid or Settings.AutoSpeedRaid
                 or Settings.BossRush or Settings.FreeBossRush
@@ -6050,7 +6114,7 @@ task.spawn(function()
                             local portal = FindPortalPart(targetMap)
                             local myRoot = GetMyRoot()
                             if portal and myRoot then
-                                myRoot.CFrame = portal.CFrame
+                                myRoot.CFrame = portal.CFrame * CFrame.new(0, 3, 0)
                                 if firetouchinterest then
                                     pcall(function()
                                         firetouchinterest(myRoot, portal, 0)
@@ -6081,34 +6145,28 @@ task.spawn(function()
 
                             local function ClickButtonOnce(btn)
                                 if not btn or not btn.Parent then return end
-                                local clicked = false
                                 if getconnections then
                                     local actConns = getconnections(btn.Activated)
                                     if actConns and #actConns > 0 then
-                                        for _, conn in pairs(actConns) do
-                                            pcall(function() conn:Fire() end)
-                                        end
-                                        clicked = true
-                                    else
-                                        local clickConns = getconnections(btn.MouseButton1Click)
-                                        if clickConns and #clickConns > 0 then
-                                            for _, conn in pairs(clickConns) do
-                                                pcall(function() conn:Fire() end)
-                                            end
-                                            clicked = true
-                                        end
+                                        for _, conn in pairs(actConns) do pcall(function() conn:Fire() end) end
+                                    end
+                                    local clickConns = getconnections(btn.MouseButton1Click)
+                                    if clickConns and #clickConns > 0 then
+                                        for _, conn in pairs(clickConns) do pcall(function() conn:Fire() end) end
                                     end
                                 end
-                                if not clicked and firesignal then
+                                if firesignal then
                                     pcall(function() firesignal(btn.Activated) end)
+                                    pcall(function() firesignal(btn.MouseButton1Click) end)
                                 end
                             end
 
                             for _, gui in ipairs(pg:GetChildren()) do
                                 if gui:IsA("ScreenGui") and gui.Enabled then
                                     local gName = gui.Name:lower()
-                                    -- Bỏ qua GUI của Hub và thanh điều hướng chính (HUD / Main / Lobby)
+                                    -- Bỏ qua GUI của Hub và thanh điều hướng chính (HUD / Main / Lobby) và BỎ QUA GUI CỦA CHẾ ĐỘ INFINITE
                                     local isBlockedGui = gName:find("orion", 1, true) or gName:find("vht", 1, true) or gName:find("slh", 1, true)
+                                        or gName:find("infinite", 1, true) or (gName:find("inf", 1, true) and not gName:find("info", 1, true))
                                     if not isBlockedGui then
                                         for _, btn in ipairs(gui:GetDescendants()) do
                                             if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible and IsGuiElementReallyVisible(btn) then
@@ -6123,12 +6181,15 @@ task.spawn(function()
                                                     continue
                                                 end
 
+                                                -- TUYỆT ĐỐI KHÔNG CLICK VÀO CÁC NÚT INFINITE MODE HOẶC CÁC NÚT MUA SẮM
                                                 local isDangerous = bName:find("buy", 1, true) or bText:find("buy", 1, true)
                                                     or bName:find("purchase", 1, true) or bText:find("purchase", 1, true)
                                                     or bName:find("robux", 1, true) or bText:find("robux", 1, true)
                                                     or bName:find("shop", 1, true) or bText:find("shop", 1, true)
                                                     or bName:find("gift", 1, true) or bText:find("gift", 1, true)
                                                     or bName:find("close", 1, true) or bText == "x" or bText == "close"
+                                                    or bName:find("infinite", 1, true) or bText:find("infinite", 1, true)
+                                                    or bText == "inf" or bName == "inf"
                                                 if isDangerous then
                                                     continue
                                                 end
@@ -6150,6 +6211,22 @@ task.spawn(function()
 
                                                 if isStartMatch then
                                                     ClickButtonOnce(btn)
+                                                end
+
+                                                -- 3c. Chọn tab Dimension / Story nếu giao diện có chia tab chế độ
+                                                local isDimTab = (bText == "dimension" or bName == "dimension" or bText == "dimensions" or bName == "dimensions" or bText == "story" or bName == "story")
+                                                if isDimTab then
+                                                    ClickButtonOnce(btn)
+                                                end
+
+                                                -- 3d. Click chọn card Map nếu danh sách Dimension đang mở
+                                                local mapClean = targetMap:lower():gsub(" dimension", ""):gsub(" ", "")
+                                                local bClean = bText:gsub(" ", "")
+                                                local bnClean = bName:gsub(" ", "")
+                                                if not isStartMatch and not (bText == diffLower or bName == diffLower) then
+                                                    if bClean == mapClean or bnClean == mapClean or bClean:find(mapClean, 1, true) or bnClean:find(mapClean, 1, true) then
+                                                        ClickButtonOnce(btn)
+                                                    end
                                                 end
                                             end
                                         end
