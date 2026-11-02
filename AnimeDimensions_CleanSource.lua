@@ -211,6 +211,7 @@ local AutoSaveFile = "AnimeDimensions_AutoSave.json"
 local Settings = {
      Language = "Tiếng Việt", -- Ngôn ngữ mặc định (Tiếng Việt / English)
    -- TAB 1: MAIN & FARMING
+    AutoJoinMap = false, -- Tự động vào map và tự động farm trọn gói
     MapSelection = "Auto",
     SelectDifficulty = "Auto", -- Tự động chọn độ khó (Auto / Nightmare / Hard / Easy) theo Level và Sức Mạnh
     WaitOnLobbyAfterJoin = 10,
@@ -2415,6 +2416,8 @@ local I18N = {
 
     -- Tab 1: Main (Chính)
     ["Farming"] = { ["Tiếng Việt"] = "Cày Cuốc (Farming)", ["English"] = "Farming" },
+    ["AutoJoinMap"] = { ["Tiếng Việt"] = "Tự Động Vào & Farm Map (Auto Join & Farm)", ["English"] = "Auto Join & Farm Map" },
+    ["JoinMapNow"] = { ["Tiếng Việt"] = "Vào Map Ngay (Join Map Now)", ["English"] = "Join Map Now" },
     ["MapSelection(AutoUpdate!)"] = { ["Tiếng Việt"] = "Chọn Bản Đồ (Map Selection)", ["English"] = "Map Selection (Auto Update!)" },
     ["SelectDifficulty"] = { ["Tiếng Việt"] = "Chọn Độ Khó (Auto/Nightmare/Hard/Easy)", ["English"] = "Select Difficulty (Auto/Nightmare/Hard/Easy)" },
     ["WaitOnLobbyAfterJoin(OnlyNumber)"] = { ["Tiếng Việt"] = "Thời Gian Đợi Sảnh (Giây)", ["English"] = "Wait On Lobby After Join (Sec)" },
@@ -2615,8 +2618,83 @@ local MainTab = Window:MakeTab({ Name = T("Main"),
 
 MainTab:AddSection({ Name = T("Farming") })
 
-local ToggleAutoMob, ToggleAutoMelee, ToggleKillAura, ToggleAutoSkill, ToggleAutoAssistSkill, ToggleAutoFruitSkill, ToggleAutoReplay, ToggleAutoSelectMap
+local ToggleAutoJoinMap, ToggleAutoMob, ToggleAutoMelee, ToggleKillAura, ToggleAutoSkill, ToggleAutoAssistSkill, ToggleAutoFruitSkill, ToggleAutoReplay, ToggleAutoSelectMap
 local DropdownMapSelection, DropdownSelectDifficulty
+
+ToggleAutoJoinMap = MainTab:AddToggle({ Name = T("AutoJoinMap"),
+    Default = Settings.AutoJoinMap,
+    Callback = function(v)
+        Settings.AutoJoinMap = v
+        if uiBuilding then return end
+        if v then
+            Settings.AutoMob = true
+            Settings.AutoSkill = true
+            Settings.AutoAssistSkill = true
+            Settings.AutoFruitSkill = true
+            Settings.AutoReplay = true
+            Settings.AutoNextRoom = true
+
+            ProgrammaticSetToggle(ToggleAutoMob, true)
+            ProgrammaticSetToggle(ToggleAutoSkill, true)
+            ProgrammaticSetToggle(ToggleAutoAssistSkill, true)
+            ProgrammaticSetToggle(ToggleAutoFruitSkill, true)
+            ProgrammaticSetToggle(ToggleAutoReplay, true)
+
+            pcall(function()
+                OrionLib:MakeNotification({
+                    Name = "🚀 Auto Join & Farm Map",
+                    Content = "Đã BẬT Tự Động Vào Map & Farm tự động trọn gói!",
+                    Image = "rbxassetid://4483345998",
+                    Time = 4
+                })
+            end)
+        end
+        AutoSave()
+    end
+})
+
+MainTab:AddButton({ Name = T("JoinMapNow"),
+    Callback = function()
+        pcall(function()
+            if not IsLobby() then
+                OrionLib:MakeNotification({
+                    Name = "⚠️ Thông Báo",
+                    Content = "Bạn đang ở trong trận đấu, không cần vào lại!",
+                    Image = "rbxassetid://4483345998",
+                    Time = 3
+                })
+                return
+            end
+            local targetMap = (Settings.MapSelection and Settings.MapSelection ~= "" and Settings.MapSelection ~= "Auto") and Settings.MapSelection or (GetBestMapName and GetBestMapName() or "Titan Dimension")
+            local targetDiff = GetBestDifficulty and GetBestDifficulty(targetMap) or "Easy"
+            OrionLib:MakeNotification({
+                Name = "🎯 Đang Vào Map...",
+                Content = "Map: " .. tostring(targetMap) .. " (" .. tostring(targetDiff) .. ")",
+                Image = "rbxassetid://4483345998",
+                Time = 3
+            })
+            local roomRemote = FindRemote({"CreateRoom", "JoinRoom", "StartDungeon", "EnterDimension", "Elevator", "JoinDimension", "CreateDimension", "StartMatch", "EnterDungeon", "PlayDungeon", "QueueDimension", "SelectDimension"})
+            if roomRemote then
+                SafeFireRemote(roomRemote, targetMap, targetDiff, Settings.FriendOnly, Settings.Hardcore)
+                SafeFireRemote(roomRemote, targetMap, targetDiff)
+            end
+            local portal = FindPortalPart and FindPortalPart(targetMap)
+            local myRoot = GetMyRoot and GetMyRoot()
+            if portal and myRoot then
+                local portalPart = portal:IsA("BasePart") and portal or (portal:IsA("Model") and (portal.PrimaryPart or portal:FindFirstChildWhichIsA("BasePart", true)))
+                local portalCF = portalPart and portalPart.CFrame or (portal:IsA("Model") and portal:GetPivot())
+                if portalCF then
+                    myRoot.CFrame = portalCF * CFrame.new(0, 3, 0)
+                    if firetouchinterest and portalPart then
+                        firetouchinterest(myRoot, portalPart, 0)
+                        task.wait(0.05)
+                        firetouchinterest(myRoot, portalPart, 1)
+                    end
+                end
+            end
+        end)
+    end
+})
 
 ToggleAutoSelectMap = MainTab:AddToggle({ Name = T("AutoSelectMap(DetectedLevel)"),
     Default = Settings.AutoSelectMap,
@@ -4527,22 +4605,62 @@ end
 -- HÀM KIỂM TRA MÁU AN TOÀN CHỐNG VĂNG RUNTIME LỖI NẾU 'Health' LÀ PART/FOLDER HITBOX
 local function CheckIsAlive(model, hum)
     if not model or not model.Parent then return false end
+
+    -- 1. Kiểm tra Humanoid State và Health
     if hum then
-        if hum.Health and hum.Health > 0 then
+        local stateOk, state = pcall(function() return hum:GetState() end)
+        if stateOk and state == Enum.HumanoidStateType.Dead then
+            return false
+        end
+        local hOk, h = pcall(function() return hum.Health end)
+        if hOk and type(h) == "number" and h > 0 then
             return true
         end
-        return false
     end
-    local hp = model:FindFirstChild("Health") or model:FindFirstChild("HP") or model:FindFirstChild("hp") or model:GetAttribute("Health") or model:GetAttribute("HP")
-    if type(hp) == "number" and hp > 0 then
+
+    -- 2. Kiểm tra Attribute Health / HP
+    local attrHp = model:GetAttribute("Health") or model:GetAttribute("HP") or model:GetAttribute("hp")
+    if type(attrHp) == "number" and attrHp > 0 then
         return true
     end
-    if typeof(hp) == "Instance" and hp:IsA("ValueBase") then
-        local ok, val = pcall(function() return tonumber(hp.Value) end)
-        if ok and val and val > 0 then
+
+    -- 3. Kiểm tra ValueBase (IntValue, NumberValue, StringValue)
+    local hpObj = model:FindFirstChild("Health") or model:FindFirstChild("HP") or model:FindFirstChild("hp")
+    if hpObj then
+        if typeof(hpObj) == "Instance" and hpObj:IsA("ValueBase") then
+            local ok, val = pcall(function() return tonumber(hpObj.Value) end)
+            if ok and val and val > 0 then
+                return true
+            end
+        elseif type(hpObj) == "number" and hpObj > 0 then
             return true
         end
     end
+
+    -- 4. Kiểm tra nhãn hiển thị máu trên đầu quái (BillboardGui như 3789/4372)
+    local bb = model:FindFirstChildOfClass("BillboardGui") or model:FindFirstChild("HealthBar", true) or model:FindFirstChild("Status", true)
+    if bb then
+        for _, lbl in ipairs(bb:GetDescendants()) do
+            if lbl:IsA("TextLabel") and lbl.Text:find("%d") then
+                local cur = lbl.Text:match("(%d+)[%s/]+")
+                if cur and tonumber(cur) and tonumber(cur) > 0 then
+                    return true
+                end
+            end
+        end
+    end
+
+    -- 5. Fallback: Nếu có Humanoid và MaxHealth > 0 và chưa Dead, coi là còn sống
+    if hum then
+        local mOk, maxH = pcall(function() return hum.MaxHealth end)
+        if mOk and type(maxH) == "number" and maxH > 0 then
+            local sOk, isDead = pcall(function() return hum:GetState() == Enum.HumanoidStateType.Dead end)
+            if not sOk or not isDead then
+                return true
+            end
+        end
+    end
+
     return false
 end
 
@@ -4865,7 +4983,7 @@ task.spawn(function()
         end
 
         local hasOtherPlayers = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
-        if not hasOtherPlayers and (Settings.AutoMob or Settings.AutoPlay) then
+        if not hasOtherPlayers and (Settings.AutoMob or Settings.AutoPlay or Settings.AutoJoinMap) then
             local char = GetMyChar()
             local myRoot = GetMyRoot()
             local myHum = GetMyHumanoid()
@@ -5008,7 +5126,7 @@ task.spawn(function()
         if not CheckInGame() or IsLobby() then continue end
         local hasOther = Settings.DoNotThingIfHavePlayer and #Players:GetPlayers() > 1
         if hasOther then continue end
-        if not (Settings.AutoSkill or Settings.AutoPlay) then continue end
+        if not (Settings.AutoSkill or Settings.AutoPlay or Settings.AutoJoinMap) then continue end
 
         local myHum = GetMyHumanoid()
         local myRoot = GetMyRoot()
@@ -5230,7 +5348,7 @@ task.spawn(function()
             progressedThisMatch = false
         end
 
-        if CheckInGame() and not IsLobby() and Settings.AutoReplay and not (isRaidOpen and Settings.StopReplayIfRaidOpen) then
+        if CheckInGame() and not IsLobby() and (Settings.AutoReplay or Settings.AutoPlay or Settings.AutoJoinMap) and not (isRaidOpen and Settings.StopReplayIfRaidOpen) then
             local bestMap = GetBestMapName()
             if _G.VHT_CurrentDimensionMap and _G.VHT_CurrentDimensionMap ~= "" and _G.VHT_CurrentDimensionMap:lower() == bestMap:lower() then
                 progressedThisMatch = false
@@ -6031,7 +6149,8 @@ task.spawn(function()
             end
 
             local hasMapSelection = (Settings.MapSelection and Settings.MapSelection ~= "" and Settings.MapSelection ~= "Auto")
-            local shouldJoin = Settings.AutoPlay
+            local shouldJoin = Settings.AutoJoinMap
+                or Settings.AutoPlay
                 or Settings.AutoSelectMap
                 or hasMapSelection
                 or Settings.AutoRaid or Settings.AutoSpeedRaid
@@ -6111,8 +6230,8 @@ task.spawn(function()
                     end
                     isJoining = false
 
-                -- 5. Auto Dimension Map (CHẠY KHI BẬT AUTOPLAY, AUTOSELECTMAP HOẶC CHỌN MAP)
-                elseif Settings.AutoPlay or Settings.AutoSelectMap or hasMapSelection then
+                -- 5. Auto Dimension Map (CHẠY KHI BẬT AUTOJOINMAP, AUTOPLAY, AUTOSELECTMAP HOẶC CHỌN MAP)
+                elseif Settings.AutoJoinMap or Settings.AutoPlay or Settings.AutoSelectMap or hasMapSelection then
                     local targetMap = GetBestMapName()
                     local targetDifficulty = GetBestDifficulty(targetMap)
                     local now = os.clock()
