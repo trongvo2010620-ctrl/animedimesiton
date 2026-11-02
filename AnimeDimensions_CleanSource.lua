@@ -1887,7 +1887,7 @@ function OrionLib:MakeWindow(WindowConfig)
 				BindConfig.Flag = BindConfig.Flag or nil
 				BindConfig.Save = BindConfig.Save or false
 
-				local Bind = {Value, Binding = false, Type = "Bind", Save = BindConfig.Save}
+				local Bind = {Value = nil, Binding = false, Type = "Bind", Save = BindConfig.Save}
 				local Holding = false
 
 				local Click = SetProps(MakeElement("Button"), {
@@ -2203,6 +2203,8 @@ function OrionLib:MakeWindow(WindowConfig)
 				ColorH = 1 - (math.clamp(HueSelection.AbsolutePosition.Y - Hue.AbsolutePosition.Y, 0, Hue.AbsoluteSize.Y) / Hue.AbsoluteSize.Y)
 				ColorS = (math.clamp(ColorSelection.AbsolutePosition.X - Color.AbsolutePosition.X, 0, Color.AbsoluteSize.X) / Color.AbsoluteSize.X)
 				ColorV = 1 - (math.clamp(ColorSelection.AbsolutePosition.Y - Color.AbsolutePosition.Y, 0, Color.AbsoluteSize.Y) / Color.AbsoluteSize.Y)
+
+				local ColorInput, HueInput
 
 				AddConnection(Color.InputBegan, function(input)
 					if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -5086,6 +5088,7 @@ local waveLabelCache = nil
 local lastWaveScanTick = 0
 local progressedThisMatch = false
 local progressedAtTime = 0
+local GetBestMapName
 
 task.spawn(function()
     while task.wait(1.5) do
@@ -5771,7 +5774,7 @@ local function GetBestDifficulty(mapName)
 end
 
 -- HÀM TỰ ĐỘNG CHỌN MAP THÔNG MINH THEO CẢ CẤP ĐỘ VÀ SỨC MẠNH
-local function GetBestMapName()
+function GetBestMapName()
     if not Settings.AutoSelectMap and Settings.MapSelection and Settings.MapSelection ~= "Auto" and Settings.MapSelection ~= "" then
         return Settings.MapSelection
     end
