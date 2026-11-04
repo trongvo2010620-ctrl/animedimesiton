@@ -20,16 +20,17 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
     local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FZ8nj2VdyKq/inventory/main/ADS%20inventory.lua"))()
 
     -- ===================================================================
-    -- VHT-HUB: THEME & COLOR PALETTE (NEON CYBER VIOLET & ELECTRIC CYAN)
+    -- VHT-HUB: PHONG CÁCH TƯƠNG LAI (FUTURISTIC SCI-FI // QUANTUM CYBER HUD)
     -- ===================================================================
-    local primaryAccent = Color3.fromRGB(138, 75, 255)    -- Neon Violet
-    local secondaryAccent = Color3.fromRGB(0, 220, 255)   -- Electric Cyan
-    local bgDark = Color3.fromRGB(14, 16, 25)             -- Deep Midnight
-    local sectorBg = Color3.fromRGB(21, 24, 38)           -- Sleek Card Gray
-    local borderCol = Color3.fromRGB(48, 55, 82)          -- Clean Accent Border
-    local outlineCol = Color3.fromRGB(32, 37, 56)         -- Dark Outline
-    local textBright = Color3.fromRGB(245, 248, 255)      -- Pure White
-    local textMuted = Color3.fromRGB(165, 175, 205)       -- Modern Silver Blue
+    local primaryAccent = Color3.fromRGB(0, 245, 255)     -- Hologram Laser Cyan (Sắc xanh lượng tử tương lai)
+    local secondaryAccent = Color3.fromRGB(0, 140, 255)   -- Deep Plasma Blue (Xanh plasma vũ trụ)
+    local glowAccent = Color3.fromRGB(60, 255, 230)      -- Mint Cyan Glow (Ánh sáng phát quang vi tính)
+    local bgDark = Color3.fromRGB(8, 11, 19)              -- Quantum Void Black (Đen không gian sâu thẳm)
+    local sectorBg = Color3.fromRGB(13, 19, 32)           -- Sci-Fi HUD Panel (Khung kính công nghệ cao)
+    local borderCol = Color3.fromRGB(25, 65, 105)         -- Tech Grid Wireframe (Đường lưới viền viễn tưởng)
+    local outlineCol = Color3.fromRGB(16, 42, 72)         -- Cyber Outline
+    local textBright = Color3.fromRGB(240, 255, 255)      -- Ice White (Trắng băng lượng tử)
+    local textMuted = Color3.fromRGB(120, 165, 205)       -- Hologram Muted (Xanh bạc vi tính mờ)
 
     _G.Color = primaryAccent
     _G.Color2 = secondaryAccent
@@ -48,20 +49,20 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
         accentcolor = primaryAccent,
         accentcolor2 = secondaryAccent,
         outlinecolor = outlineCol,
-        outlinecolor2 = Color3.fromRGB(8, 10, 16),
+        outlinecolor2 = Color3.fromRGB(4, 7, 12),
         sectorcolor = sectorBg,
-        toptextcolor = Color3.fromRGB(180, 140, 255),
+        toptextcolor = primaryAccent,
         topheight = 48,
         dpScrollBarThickness = 8,
-        topcolor = Color3.fromRGB(26, 30, 48),
-        topcolor2 = Color3.fromRGB(16, 18, 30),
-        buttoncolor = Color3.fromRGB(32, 38, 58),
-        buttoncolor2 = Color3.fromRGB(22, 26, 42),
+        topcolor = Color3.fromRGB(15, 28, 48),
+        topcolor2 = Color3.fromRGB(9, 15, 26),
+        buttoncolor = Color3.fromRGB(18, 34, 58),
+        buttoncolor2 = Color3.fromRGB(12, 22, 38),
         itemscolor = textMuted,
         itemscolor2 = Color3.fromRGB(255, 255, 255)
     }
 
-    local Window = library:CreateWindow("VHT-HUB | Anime Dimensions | Premium")
+    local Window = library:CreateWindow("VHT-HUB ✦ FUTURE TECH // Anime Dimensions")
 
     -- ===================================================================
     -- VHT-HUB: SMOOTH TOGGLE ANIMATION (SPRING/POP EFFECT)
@@ -235,8 +236,8 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
 
         local stroke = Instance.new("UIStroke")
         stroke.Thickness = 2
-        stroke.Color = Color3.fromRGB(255, 255, 255)
-        stroke.Transparency = 0.3
+        stroke.Color = primaryAccent
+        stroke.Transparency = 0.15
         stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         stroke.Parent = btn
 
