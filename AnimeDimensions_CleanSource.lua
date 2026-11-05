@@ -1,23 +1,103 @@
-repeat wait() until game:IsLoaded()
-if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6990133340 or game.PlaceId == 6990131029 or game.PlaceId == 7338881230 or game.PlaceId == 7274690025 then
-    if game.PlaceId == 6938803436 or game.PlaceId == 7274690025 then
-        repeat wait(.5) until game:GetService("Players").LocalPlayer.PlayerGui.MainGui.CenterUIFrame.PlayFrame.Frame.PlayRoomFrame.MapSelectionScrollingFrame:FindFirstChildOfClass("ImageButton")
-        MapSelection = {"TimeChallenge"}
-        for i,v in pairs(game:GetService("Players").LocalPlayer.PlayerGui.MainGui.CenterUIFrame.PlayFrame.Frame.PlayRoomFrame.MapSelectionScrollingFrame:GetChildren()) do
-            if v.ClassName == "ImageButton" and v.Name ~= "MapSelectionTemplate" then
-                table.insert(MapSelection, v.Name)
+if not game:IsLoaded() then
+    pcall(function() game.Loaded:Wait() end)
+end
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+    task.wait(0.2)
+    LocalPlayer = Players.LocalPlayer
+end
+
+-- ===================================================================
+-- VHT-HUB: ANIME DIMENSIONS INITIALIZATION (SAFE NON-BLOCKING)
+-- ===================================================================
+local isAnimeDimensions = (game.GameId == 2707204739) or (game.PlaceId == 6938803436) or true
+if isAnimeDimensions then
+    -- Khởi tạo danh sách map mặc định (Không bị treo khi ở sảnh)
+    local defaultMaps = {
+        "TimeChallenge", "TitanDimension", "DemonDimension", "CurseDimension",
+        "DragonDimension", "NinjaDimension", "HeroDimension", "VirtualDimension",
+        "JujutsuDimension", "BleachDimension", "OnePieceDimension", "ChainsawDimension",
+        "SoloDimension", "FateDimension", "CloverDimension", "SlimeDimension", "ShadowDimension"
+    }
+    local defaultRaids = {"Raid1", "Raid2", "Raid3", "Raid4", "Raid5", "Raid6"}
+
+    MapSelection = defaultMaps
+    RaidSelection = defaultRaids
+
+    -- Quét map từ UI sảnh bất đồng bộ (Background Task, KHÔNG CHẶN MỞ MENU)
+    task.spawn(function()
+        pcall(function()
+            local pGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+            if not pGui then return end
+            local mainGui = pGui:WaitForChild("MainGui", 5)
+            if not mainGui then return end
+            local center = mainGui:WaitForChild("CenterUIFrame", 3)
+            if not center then return end
+            local playFrame = center:FindFirstChild("PlayFrame")
+            if not playFrame then return end
+            local scrollFrame = playFrame:FindFirstChild("Frame") and playFrame.Frame:FindFirstChild("PlayRoomFrame") and playFrame.Frame.PlayRoomFrame:FindFirstChild("MapSelectionScrollingFrame")
+            if scrollFrame then
+                local startT = os.clock()
+                while os.clock() - startT < 3 and not scrollFrame:FindFirstChildOfClass("ImageButton") do
+                    task.wait(0.5)
+                end
+                local found = {}
+                for _, v in pairs(scrollFrame:GetChildren()) do
+                    if v:IsA("ImageButton") and v.Name ~= "MapSelectionTemplate" then
+                        table.insert(found, v.Name)
+                    end
+                end
+                if #found > 0 then
+                    if game.PlaceId == 7338881230 then
+                        RaidSelection = found
+                    else
+                        table.insert(found, 1, "TimeChallenge")
+                        MapSelection = found
+                    end
+                end
             end
-        end
-    elseif game.PlaceId == 7338881230 then
-        repeat wait(.5) until game:GetService("Players").LocalPlayer.PlayerGui.MainGui.CenterUIFrame.PlayFrame.Frame.PlayRoomFrame.MapSelectionScrollingFrame:FindFirstChildOfClass("ImageButton")
-        RaidSelection = {}
-        for i,v in pairs(game:GetService("Players").LocalPlayer.PlayerGui.MainGui.CenterUIFrame.PlayFrame.Frame.PlayRoomFrame.MapSelectionScrollingFrame:GetChildren()) do
-            if v.ClassName == "ImageButton" and v.Name ~= "MapSelectionTemplate" then
-                table.insert(RaidSelection, v.Name)
+        end)
+    end)
+
+    -- ===================================================================
+    -- VHT-HUB: LOAD UI LIBRARY (MULTI-CDN MIRRORS & FAIL-SAFE)
+    -- ===================================================================
+    local library = nil
+    local libUrls = {
+        "https://raw.githubusercontent.com/FZ8nj2VdyKq/inventory/main/ADS%20inventory.lua",
+        "https://cdn.jsdelivr.net/gh/FZ8nj2VdyKq/inventory@main/ADS%20inventory.lua",
+        "https://fastly.jsdelivr.net/gh/FZ8nj2VdyKq/inventory@main/ADS%20inventory.lua",
+        "https://raw.gitmirror.com/FZ8nj2VdyKq/inventory/main/ADS%20inventory.lua"
+    }
+
+    for _, url in ipairs(libUrls) do
+        local ok, res = pcall(function()
+            return game:HttpGet(url, true)
+        end)
+        if ok and res and type(res) == "string" and #res > 500 then
+            local loadOk, libFunc = pcall(function()
+                return loadstring(res)()
+            end)
+            if loadOk and libFunc and type(libFunc) == "table" and libFunc.CreateWindow then
+                library = libFunc
+                break
             end
         end
     end
-    local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FZ8nj2VdyKq/inventory/main/ADS%20inventory.lua"))()
+
+    if not library then
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "VHT-HUB ERROR",
+                Text = "Không thể tải thư viện UI từ mạng! Kiểm tra kết nối Internet.",
+                Duration = 10
+            })
+        end)
+        error("[VHT-HUB] Failed to load UI Library from all CDN mirrors!")
+        return
+    end
 
     -- ===================================================================
     -- VHT-HUB: PHONG CÁCH TƯƠNG LAI (FUTURISTIC SCI-FI // QUANTUM CYBER HUD)
@@ -35,7 +115,7 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
     _G.Color = primaryAccent
     _G.Color2 = secondaryAccent
 
-    library.theme = {
+    local futuristicTheme = {
         fontsize = 14,
         titlesize = 19,
         font = Enum.Font.GothamBold,
@@ -62,80 +142,80 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
         itemscolor2 = Color3.fromRGB(255, 255, 255)
     }
 
+    if not library.theme then library.theme = {} end
+    for k, v in pairs(futuristicTheme) do
+        library.theme[k] = v
+    end
+
     local Window = library:CreateWindow("VHT-HUB ✦ FUTURE TECH // Anime Dimensions")
+    if Window then
+        Window.theme = library.theme
+    end
 
     -- ===================================================================
-    -- VHT-HUB: SMOOTH TOGGLE ANIMATION (SPRING/POP EFFECT)
+    -- VHT-HUB: SMOOTH TOGGLE ANIMATION (SAFE SPRING/POP EFFECT)
     -- ===================================================================
-    local rawCreateTab = Window.CreateTab
-    Window.CreateTab = function(self, tabName)
-        local tab = rawCreateTab(self, tabName)
-        local rawCreateSector = tab.CreateSector
-        tab.CreateSector = function(tabSelf, sectorName, side)
-            local sector = rawCreateSector(tabSelf, sectorName, side)
-            local rawAddToggle = sector.AddToggle
-            sector.AddToggle = function(sectorSelf, text, default, callback, flag)
-                local toggle = rawAddToggle(sectorSelf, text, default, callback, flag)
-                if toggle and toggle.Main and toggle.CheckedFrame then
-                    local checked = toggle.CheckedFrame
-                    local label = toggle.Label
-                    local outline = toggle.BlackOutline2
-                    local ts = game:GetService("TweenService")
-                    
-                    checked.AnchorPoint = Vector2.new(0.5, 0.5)
-                    checked.Position = UDim2.fromScale(0.5, 0.5)
-                    
-                    toggle.Set = function(s, value)
-                        toggle.value = value
-                        if (toggle.flag and (toggle.flag ~= "")) then
-                            library.flags[toggle.flag] = toggle.value
-                        end
-                        if value then
-                            checked.Visible = true
-                            checked.Size = UDim2.fromOffset(0, 0)
-                            ts:Create(checked, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                                Size = UDim2.fromOffset(15, 15)
-                            }):Play()
-                            if label then
-                                ts:Create(label, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                    TextColor3 = Window.theme.itemscolor2
-                                }):Play()
-                            end
-                            if outline then
-                                ts:Create(outline, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-                                    BackgroundColor3 = Window.theme.accentcolor
-                                }):Play()
-                            end
-                        else
-                            local tw = ts:Create(checked, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                                Size = UDim2.fromOffset(0, 0)
-                            })
-                            tw:Play()
-                            tw.Completed:Connect(function()
-                                if not toggle.value then
-                                    checked.Visible = false
+    if Window and Window.CreateTab then
+        local rawCreateTab = Window.CreateTab
+        Window.CreateTab = function(self, tabName)
+            local tab = rawCreateTab(self, tabName)
+            if not tab or not tab.CreateSector then return tab end
+
+            local rawCreateSector = tab.CreateSector
+            tab.CreateSector = function(tabSelf, sectorName, side)
+                local sector = rawCreateSector(tabSelf, sectorName, side)
+                if not sector or not sector.AddToggle then return sector end
+
+                local rawAddToggle = sector.AddToggle
+                sector.AddToggle = function(sectorSelf, text, default, callback, flag)
+                    local toggle = rawAddToggle(sectorSelf, text, default, callback, flag)
+                    if toggle and typeof(toggle) == "table" and toggle.CheckedFrame then
+                        pcall(function()
+                            local checked = toggle.CheckedFrame
+                            local ts = game:GetService("TweenService")
+                            checked.AnchorPoint = Vector2.new(0.5, 0.5)
+                            checked.Position = UDim2.fromScale(0.5, 0.5)
+
+                            local rawSet = toggle.Set
+                            toggle.Set = function(s, value)
+                                if rawSet then
+                                    pcall(rawSet, s, value)
+                                else
+                                    toggle.value = value
+                                    if toggle.flag and toggle.flag ~= "" and library.flags then
+                                        library.flags[toggle.flag] = value
+                                    end
+                                    pcall(toggle.callback, value)
                                 end
-                            end)
-                            if label then
-                                ts:Create(label, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                                    TextColor3 = Window.theme.itemscolor
-                                }):Play()
+
+                                pcall(function()
+                                    if value then
+                                        checked.Visible = true
+                                        checked.Size = UDim2.fromOffset(0, 0)
+                                        ts:Create(checked, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                                            Size = UDim2.fromOffset(15, 15)
+                                        }):Play()
+                                    else
+                                        local tw = ts:Create(checked, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                                            Size = UDim2.fromOffset(0, 0)
+                                        })
+                                        tw:Play()
+                                        tw.Completed:Connect(function()
+                                            if not toggle.value then
+                                                checked.Visible = false
+                                            end
+                                        end)
+                                    end
+                                end)
                             end
-                            if outline then
-                                ts:Create(outline, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-                                    BackgroundColor3 = Window.theme.outlinecolor2
-                                }):Play()
-                            end
-                        end
-                        pcall(toggle.callback, value)
+                        end)
                     end
-                    toggle:Set(toggle.default)
+                    return toggle
                 end
-                return toggle
+                return sector
             end
-            return sector
+            return tab
         end
-        return tab
     end
 
     -- ===================================================================
@@ -144,55 +224,116 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
     local TweenService = game:GetService("TweenService")
     local UserInputService = game:GetService("UserInputService")
     local CoreGui = game:GetService("CoreGui")
-    
-    local mainFrame = Window.Frame
-    local originalSize = Window.size or UDim2.fromOffset(600, 400)
+
+    local function GetWindowScreenGui()
+        if Window and Window.ScreenGui and typeof(Window.ScreenGui) == "Instance" and Window.ScreenGui:IsA("ScreenGui") then
+            return Window.ScreenGui
+        end
+        local searchParents = {}
+        pcall(function()
+            if syn and syn.protect_gui then table.insert(searchParents, CoreGui) end
+            if gethui then table.insert(searchParents, gethui()) end
+            table.insert(searchParents, CoreGui)
+            if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+                table.insert(searchParents, LocalPlayer.PlayerGui)
+            end
+        end)
+        for _, parent in ipairs(searchParents) do
+            for _, gui in ipairs(parent:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Name ~= "VHT_FloatingToggle" then
+                    for _, c in ipairs(gui:GetChildren()) do
+                        if c:IsA("Frame") and c.AbsoluteSize.X > 200 then
+                            return gui
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local function GetWindowMainFrame(sg)
+        if Window and Window.Frame and typeof(Window.Frame) == "Instance" and Window.Frame:IsA("Frame") then return Window.Frame end
+        if Window and Window.Main and typeof(Window.Main) == "Instance" and Window.Main:IsA("Frame") then return Window.Main end
+        if Window and Window.Background and typeof(Window.Background) == "Instance" and Window.Background:IsA("Frame") then return Window.Background end
+        if Window and Window.Base and typeof(Window.Base) == "Instance" and Window.Base:IsA("Frame") then return Window.Base end
+        if sg then
+            for _, child in ipairs(sg:GetChildren()) do
+                if child:IsA("Frame") and child.Name ~= "VHT_FloatingToggle" and child.AbsoluteSize.X > 200 then
+                    return child
+                end
+            end
+        end
+        return nil
+    end
+
     local isUIVisible = true
     local isAnimating = false
 
-    local function AnimateToggleUI(targetState)
+    local function ToggleWindowVisibility(targetState)
         if isAnimating then return end
         if targetState == nil then
             targetState = not isUIVisible
         end
         if targetState == isUIVisible then return end
-        
+
+        local sg = GetWindowScreenGui()
+        local frame = GetWindowMainFrame(sg)
+
         isAnimating = true
         if targetState then
             isUIVisible = true
-            mainFrame.Visible = true
-            mainFrame.Size = UDim2.fromOffset(originalSize.X.Offset * 0.7, originalSize.Y.Offset * 0.7)
-            local openTween = TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                Size = originalSize
-            })
-            openTween:Play()
-            openTween.Completed:Connect(function()
-                isAnimating = false
-            end)
+            if sg then sg.Enabled = true end
+            if frame then
+                frame.Visible = true
+                pcall(function()
+                    local targetSize = (Window and Window.size) or UDim2.fromOffset(frame.AbsoluteSize.X, frame.AbsoluteSize.Y)
+                    if targetSize.X.Offset == 0 then targetSize = UDim2.fromOffset(600, 400) end
+                    frame.Size = UDim2.fromOffset(targetSize.X.Offset * 0.75, targetSize.Y.Offset * 0.75)
+                    local openTw = TweenService:Create(frame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                        Size = targetSize
+                    })
+                    openTw:Play()
+                end)
+            end
+            task.delay(0.26, function() isAnimating = false end)
         else
             isUIVisible = false
-            local closeTween = TweenService:Create(mainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-                Size = UDim2.fromOffset(originalSize.X.Offset * 0.4, originalSize.Y.Offset * 0.4)
-            })
-            closeTween:Play()
-            closeTween.Completed:Connect(function()
-                if not isUIVisible then
-                    mainFrame.Visible = false
-                end
+            if frame then
+                pcall(function()
+                    local currentSize = frame.Size
+                    local closeTw = TweenService:Create(frame, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+                        Size = UDim2.fromOffset(currentSize.X.Offset * 0.5, currentSize.Y.Offset * 0.5)
+                    })
+                    closeTw:Play()
+                    closeTw.Completed:Connect(function()
+                        if not isUIVisible then
+                            frame.Visible = false
+                            if sg then sg.Enabled = false end
+                            frame.Size = currentSize
+                        end
+                        isAnimating = false
+                    end)
+                end)
+            else
+                if sg then sg.Enabled = false end
                 isAnimating = false
-            end)
+            end
         end
     end
 
-    -- Hook Hide Key (Insert / RightControl)
+    -- Hook Hide Key (Insert / RightControl / RightShift)
     UserInputService.InputBegan:Connect(function(input, gpe)
-        if not gpe and (input.KeyCode == Enum.KeyCode.Insert or input.KeyCode == Enum.KeyCode.RightControl) then
-            AnimateToggleUI()
+        if not gpe and (input.KeyCode == Enum.KeyCode.Insert or input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.RightShift) then
+            ToggleWindowVisibility()
         end
     end)
 
     -- Nút bật/tắt nổi VHT-HUB (Hỗ trợ PC & Mobile cực mượt)
     pcall(function()
+        local oldToggle = CoreGui:FindFirstChild("VHT_FloatingToggle") or (gethui and gethui():FindFirstChild("VHT_FloatingToggle"))
+        if oldToggle then oldToggle:Destroy() end
+
         local toggleGui = Instance.new("ScreenGui")
         toggleGui.Name = "VHT_FloatingToggle"
         toggleGui.ResetOnSpawn = false
@@ -206,7 +347,7 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
         else
             pcall(function() toggleGui.Parent = CoreGui end)
             if not toggleGui.Parent then
-                toggleGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+                toggleGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
             end
         end
 
@@ -271,8 +412,17 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
                     Size = UDim2.fromOffset(48, 48)
                 }):Play()
             end)
-            AnimateToggleUI()
+            ToggleWindowVisibility()
         end)
+    end)
+
+    -- Thông báo nạp menu thành công
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "VHT-HUB ✦ FUTURE TECH",
+            Text = "Menu đã mở! (Phím Insert/RightCtrl hoặc chạm nút VHT)",
+            Duration = 5
+        })
     end)
     local Tab1 = Window:CreateTab("Main")
 	local Sector1 = Tab1:CreateSector("Farming", "left")
@@ -1881,10 +2031,18 @@ if game.PlaceId == 6938803436 or game.PlaceId == 6990129309 or game.PlaceId == 6
 		game:GetService("VirtualUser"):ClickButton2(Vector2.new())
 	end)
     ClickTP()
-	library:ConfigSystem("AnimeDimensions"):Load()
-    while wait(1) do
-    	pcall(function()
-    		library:ConfigSystem("AnimeDimensions"):Save()
-    	end)
-	end
+    pcall(function()
+        if library and library.ConfigSystem then
+            library:ConfigSystem("AnimeDimensions"):Load()
+        end
+    end)
+    task.spawn(function()
+        while task.wait(2) do
+            pcall(function()
+                if library and library.ConfigSystem then
+                    library:ConfigSystem("AnimeDimensions"):Save()
+                end
+            end)
+        end
+    end)
 end
