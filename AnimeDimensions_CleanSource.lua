@@ -3884,11 +3884,11 @@ if isAnimeDimensions then
     local Tab2 = Window:CreateTab("More")
     local Sector1 = Tab2:CreateSector("JoiningCombo", "left")
     Sector1:AddLabel("JoinRaidLobby To ShowRaid",true)
-    Sector1:AddDropdown("RaidSelection",RaidSelection, false ,false , function(v)
+    Sector1:AddDropdown("RaidSelection", RaidSelection, RaidSelection[1] or "Raid1", false, function(v)
         _G.RaidSelection = v
     end)
     Sector1:AddTextbox("Cooldown JoinRaid(OnlyNumber)" , "10" , function(w)
-        _G.waitonJoinRiad = w
+        _G.waitonJoinRiad = tonumber(w) or 10
     end)
     Sector1:AddToggle("AutoRaid", false, function(t)
 		_G.AutoRaid = t
@@ -4217,15 +4217,6 @@ if isAnimeDimensions then
         return thing
     end
 
-    local function safeGetMobDistance()
-        local mob = getClosestMob()
-        local char = game.Players.LocalPlayer.Character
-        if not mob or not mob:FindFirstChild("HumanoidRootPart") or not char or not char:FindFirstChild("HumanoidRootPart") then
-            return math.huge
-        end
-        return (mob.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
-    end
-
     local function getClosestMob()
         local dist, thing = math.huge
             for i, v in next, workspace.Folders.Monsters:GetChildren() do
@@ -4238,6 +4229,15 @@ if isAnimeDimensions then
                 end
             end
         return thing
+    end
+
+    local function safeGetMobDistance()
+        local mob = getClosestMob()
+        local char = game.Players.LocalPlayer.Character
+        if not mob or not mob:FindFirstChild("HumanoidRootPart") or not char or not char:FindFirstChild("HumanoidRootPart") then
+            return math.huge
+        end
+        return (mob.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
     end
 
     function walk(P)
@@ -4257,6 +4257,7 @@ if isAnimeDimensions then
                 local closest = getClosestMob()
                 local dist = closest and closest:FindFirstChild("HumanoidRootPart") and (closest.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude or 100
                 local speed = tonumber(_G.TWSpeed) or 200
+                if speed <= 0 then speed = 200 end
                 game:GetService("TweenService"):Create(game.Players.LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(dist / speed, Enum.EasingStyle.Linear), {CFrame = targetCFrame}):Play()
             end)
         end
@@ -4868,6 +4869,7 @@ if isAnimeDimensions then
                     if _G.SendIfLevelUp == true then
                         repeat wait(1) until game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.LevelUpImage.Visible == true
                         function webhook(data)
+                            if not _G.UrlWebhook or _G.UrlWebhook == "" then return end
                             local request = http_request or request or HttpPost or (syn and syn.request) or (fluxus and fluxus.request)
                             request({Url = _G.UrlWebhook,
                             Method = "POST",
@@ -5003,6 +5005,7 @@ if isAnimeDimensions then
                             table.insert(itemnum,text)
                         end
                         function webhook(data)
+                            if not _G.UrlWebhook or _G.UrlWebhook == "" then return end
                             local request = http_request or request or HttpPost or (syn and syn.request) or (fluxus and fluxus.request)
                             request({
                             Url = _G.UrlWebhook,
@@ -5049,13 +5052,14 @@ if isAnimeDimensions then
         pcall(function()
             while task.wait() do
                 pcall(function()
-                    if _G.DontNoclip == true then
-                        for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-                            if v:IsA("BasePart") then v.CanCollide = true end
-                        end
-                    else
-                        for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-                            if v:IsA("BasePart") then v.CanCollide = false end
+                    local _ch = game.Players.LocalPlayer.Character
+                    if _ch then
+                        local _needCollide = _G.DontNoclip == true
+                            or (_G.AutoDodgeSkill == true and workspace.Folders.Debris:FindFirstChild("DodgePart") ~= nil)
+                        for i,v in pairs(_ch:GetChildren()) do
+                            if v:IsA("BasePart") then
+                                v.CanCollide = _needCollide
+                            end
                         end
                     end
                 end)
