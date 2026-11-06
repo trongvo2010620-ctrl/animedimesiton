@@ -12,7 +12,7 @@ end
 -- ===================================================================
 -- VHT-HUB: ANIME DIMENSIONS INITIALIZATION (SAFE NON-BLOCKING)
 -- ===================================================================
-local isAnimeDimensions = (game.GameId == 2707204739) or (game.PlaceId == 6938803436) or true
+local isAnimeDimensions = (game.GameId == 2707204739) or (game.PlaceId == 6938803436)
 if isAnimeDimensions then
     -- Khởi tạo danh sách map mặc định (Không bị treo khi ở sảnh)
     local defaultMaps = {
@@ -193,7 +193,7 @@ if isAnimeDimensions then
     			library.cursor.Visible = uis.MouseEnabled and (uis.MouseIconEnabled or game:GetService("GuiService").MenuIsOpen);
     		end);
     	elseif (not success and library.cursor) then
-    		library.cursor:Remove();
+    		library.cursor:Destroy();
     	end
     end
     library.ConfigSystem = function(self, name)
@@ -307,7 +307,7 @@ if isAnimeDimensions then
     		syn.protect_gui(watermark.main);
     	end
     	if getgenv().watermark then
-    		getgenv().watermark:Remove();
+    		getgenv().watermark:Destroy();
     	end
     	getgenv().watermark = watermark.main;
     	watermark.mainbar = Instance.new("Frame", watermark.main);
@@ -453,7 +453,7 @@ if isAnimeDimensions then
     	end
     	pcall(function()
     		if getgenv and getgenv().uilib then
-    			getgenv().uilib:Remove();
+    			getgenv().uilib:Destroy();
     		end
     		if getgenv then getgenv().uilib = window.Main; end
     	end)
@@ -1205,6 +1205,7 @@ if isAnimeDimensions then
     							if (keybind.flag and (keybind.flag ~= "")) then
     								library.flags[keybind.flag] = key;
     							end
+    							return
     						end
     						keybind.Main.Text = "[" .. (shorter_keycodes[key.Name] or key.Name) .. "]";
     						keybind.value = key;
@@ -1490,7 +1491,7 @@ if isAnimeDimensions then
     							dropdown.BlackOutlineItems.Size = dropdown.ItemsFrame.Size + UDim2.fromOffset(4, 4);
     							dropdown.BlackOutline2Items.Size = dropdown.ItemsFrame.Size + UDim2.fromOffset(6, 6);
     							dropdown.IgnoreBackButtons.Size = dropdown.ItemsFrame.Size;
-    							item:Remove();
+    							item:Destroy();
     						end
     					end;
     					dropdown.getList = function(self)
@@ -2749,7 +2750,7 @@ if isAnimeDimensions then
     							dropdown.BlackOutlineItems.Size = dropdown.ItemsFrame.Size + UDim2.fromOffset(4, 4);
     							dropdown.BlackOutline2Items.Size = dropdown.ItemsFrame.Size + UDim2.fromOffset(6, 6);
     							dropdown.IgnoreBackButtons.Size = dropdown.ItemsFrame.Size;
-    							item:Remove();
+    							item:Destroy();
     						end
     					end;
     					dropdown.getList = function(self)
@@ -2914,6 +2915,7 @@ if isAnimeDimensions then
     							library.flags[keybind.flag] = value;
     						end
     						pcall(keybind.newkeycallback, value);
+    						return
     					end
     					keybind.value = value;
     					keybind.Bind.Text = "[" .. (shorter_keycodes[value.Name or value] or value.Name or value) .. "]";
@@ -3230,7 +3232,7 @@ if isAnimeDimensions then
     						dropdown.BlackOutlineItems.Size = dropdown.ItemsFrame.Size + UDim2.fromOffset(4, 4);
     						dropdown.BlackOutline2Items.Size = dropdown.ItemsFrame.Size + UDim2.fromOffset(6, 6);
     						dropdown.IgnoreBackButtons.Size = dropdown.ItemsFrame.Size;
-    						item:Remove();
+    						item:Destroy();
     					end
     				end;
     				dropdown.getList = function(self)
@@ -3489,11 +3491,10 @@ if isAnimeDimensions then
     	GuiStat.Name = "StatBySmell";
     	GuiStat.Parent = game:GetService("CoreGui");
     	GuiStat.ResetOnSpawn = false;
-    	GuiStat.ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
     	GuiStat.IgnoreGuiInset = true;
     	GuiStat.AutoLocalize = true;
-    	GuiStat.ZIndexBehavior = "Global";
-    	GuiStat.ScreenInsets = "DeviceSafeInsets";
+    	GuiStat.ZIndexBehavior = Enum.ZIndexBehavior.Global;
+    	GuiStat.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets;
     	TopbarContainer.Name = "Frame";
     	TopbarContainer.Parent = GuiStat;
     	TopbarContainer.BackgroundTransparency = 1;
@@ -3735,6 +3736,16 @@ if isAnimeDimensions then
 
     local Window = library:CreateWindow("VHT-HUB ✦ FUTURE TECH // Anime Dimensions")
 
+    local function Notification(a, b, c, d)
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = tostring(b or "VHT-HUB"),
+                Text = tostring(c or ""),
+                Duration = tonumber(d) or 5
+            })
+        end)
+    end
+
     -- Thông báo nạp menu thành công
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -3745,14 +3756,14 @@ if isAnimeDimensions then
     end)
     local Tab1 = Window:CreateTab("Main")
 	local Sector1 = Tab1:CreateSector("Farming", "left")
-    Sector1:AddDropdown("MapSelection(AutoUpdate!)",MapSelection, false ,false , function(v)
+    Sector1:AddDropdown("MapSelection(AutoUpdate!)", MapSelection, MapSelection[1] or "TitanDimension", false, function(v)
         _G.MapSelection = v
     end)
-    Sector1:AddDropdown("SelectDifficulty",{"Easy" , "Hard" , "Nightmare" }, false ,false , function(v)
+    Sector1:AddDropdown("SelectDifficulty", {"Easy", "Hard", "Nightmare"}, "Easy", false, function(v)
         _G.Difficulty = v
     end)
     Sector1:AddTextbox("WaitOnLobbyAfterJoin(OnlyNumber)" , "10" , function(w)
-        _G.CooldownOnlobby = w
+        _G.CooldownOnlobby = tonumber(w) or 10
     end)
     Sector1:AddToggle("AutoPlay", false, function(t)
 		_G.AutoPlay = t
@@ -3779,16 +3790,16 @@ if isAnimeDimensions then
         _G.Method = v
     end)
     Sector2:AddTextbox("ImportDistance(OnlyNumber)" , "6" , function(w)
-        _G.Distance = tonumber(w)
+        _G.Distance = tonumber(w) or 6
     end)
     Sector2:AddTextbox("TweenSpeed(OnlyNumber)" , "200" , function(w)
-        _G.TWSpeed = w
+        _G.TWSpeed = tonumber(w) or 200
     end)
 	Sector2:AddToggle("AutoMob", false, function(t)
 		_G.Automob = t
 	end)
     Sector2:AddTextbox("DistanceToSkill(OnlyNumber)" , "30" , function(w)
-        _G.DistanceToSkill = tonumber(w)
+        _G.DistanceToSkill = tonumber(w) or 30
     end)
     Sector2:AddToggle("AutoSkill", false, function(t)
 		_G.AutoSkill = t
@@ -3798,11 +3809,12 @@ if isAnimeDimensions then
 	end)
 	Sector2:AddToggle("AutoFruit", false, function(t)
 		_G.AutoFruit = t
+		if t == false then _G.__autoFruit = false end
 		
 		if t then
 			if game.PlaceId == 6938803436 or game.PlaceId == 7274690025 or game.PlaceId == 7338881230 then return end
 			local function autoFruit()
-				if _G.__autoFruit == true then
+				if _G.__autoFruit then
 					return
 				end
 				_G.__autoFruit = true
@@ -3815,7 +3827,8 @@ if isAnimeDimensions then
 						fr2 = v
 					end
 				end
-				repeat task.wait() until fr1 ~= nil and fr2 ~= nil
+				local t0 = os.clock()
+				repeat task.wait() until (fr1 and fr2) or (os.clock() - t0 > 5)
 
 				if _G.AutoFruit == true then
 					local cd1, cd2 = fr1:FindFirstChild('SkillName'), fr2:FindFirstChild('SkillName');
@@ -3892,11 +3905,11 @@ if isAnimeDimensions then
     Sector1:AddToggle("AutoTraitTokens(Need LV:20)", false, function(t)
 		_G.AutoTraitTokens = t
 	end)
-    local Sector1 = Tab2:CreateSector("AutoEventMadokiRaid", "left")
-    Sector1:AddToggle("MadokiRaid(Need Raid Token)", false, function(t)
+    local Sector1b = Tab2:CreateSector("AutoEventMadokiRaid", "left")
+    Sector1b:AddToggle("MadokiRaid(Need Raid Token)", false, function(t)
 		_G.AutoMadokiRaid = t
 	end)
-    Sector1:AddToggle("JoinMadokiRaid(AutoJoinRaidLobby)", false, function(t)
+    Sector1b:AddToggle("JoinMadokiRaid(AutoJoinRaidLobby)", false, function(t)
 		_G.AutoJoinMadokiRaid = t
 	end)
     local Sector4 = Tab2:CreateSector("MoreFunction", "Right")
@@ -3918,7 +3931,7 @@ if isAnimeDimensions then
     Sector4:AddToggle("AutoClaimQuestAndReward", false, function(t)
 		_G.AutoClaimQuestAndReward = t
 	end)
-    Sector4:AddDropdown("GoLobbyMethod",{"ResetCharacter" , "TeleportToLobby" }, false ,false , function(v)
+    Sector4:AddDropdown("GoLobbyMethod", {"ResetCharacter", "TeleportToLobby"}, "ResetCharacter", false, function(v)
         _G.GoLobbyMethod = v
     end)
     Sector4:AddToggle("BackToLobbyIfRaidOpen", false, function(t)
@@ -3962,10 +3975,11 @@ if isAnimeDimensions then
 	
 	Sector1:AddToggle("Auto Change Main Character", false, function(t)
 		_G.AutoMainCharacter = t
+		if t == false then _G.autoMainC = false end
 		
 		local function autoMainCharacter()
 			if _G.autoMainC == true then return end
-			_G.autoMainC = false
+			_G.autoMainC = true
 
 			local respawnTimer;
 			for i,v in pairs(game:GetService('Players').LocalPlayer.PlayerGui:GetDescendants()) do
@@ -3975,6 +3989,7 @@ if isAnimeDimensions then
 			end
 
 			repeat task.wait() until respawnTimer ~= nil
+			_G.autoMainC = false
 
 			if _G.AutoMainCharacter == true then
 				local resetTime = 0
@@ -4076,7 +4091,7 @@ if isAnimeDimensions then
     end)
     local Tab10 = Window:CreateTab("Buy")
 	local Sector1 = Tab10:CreateSector("AutoBuy", "left")
-    Sector1:AddDropdown("Select method buy",{"(Raid)" , "(Gem)"}, false ,false , function(v)
+    Sector1:AddDropdown("Select method buy", {"(Raid)", "(Gem)"}, "(Raid)", false, function(v)
         _G.methodbuy = v
     end)
     Sector1:AddToggle("BuyRushTicket", false, function(t)
@@ -4188,20 +4203,6 @@ if isAnimeDimensions then
         end)
     end)
 
-    local function getClosestwalk()
-        local dist, thing = math.huge
-        for i, v in next, workspace.Folders.Monsters:GetChildren() do
-            if v:FindFirstChildOfClass("BillboardGui") then
-                local mag = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - v.HumanoidRootPart.Position).magnitude
-                if mag < dist then
-                    dist = mag 
-                    thing = v
-                end
-            end
-        end
-    return thing
-    end
-
     local function getClosestBoss()
         local dist, thing = math.huge
             for i, v in next, workspace.Folders.Monsters:GetChildren() do
@@ -4214,6 +4215,15 @@ if isAnimeDimensions then
                 end
             end
         return thing
+    end
+
+    local function safeGetMobDistance()
+        local mob = getClosestMob()
+        local char = game.Players.LocalPlayer.Character
+        if not mob or not mob:FindFirstChild("HumanoidRootPart") or not char or not char:FindFirstChild("HumanoidRootPart") then
+            return math.huge
+        end
+        return (mob.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
     end
 
     local function getClosestMob()
@@ -4231,6 +4241,7 @@ if isAnimeDimensions then
     end
 
     function walk(P)
+        if not P or not P:FindFirstChild("HumanoidRootPart") then return end
         if game:GetService("Players").LocalPlayer.PlayerGui.BattleGui.CenterUIFrame.RaidDataFrame.Visible == true and _G.DoNotThingIfHavePlayer == true and _G.CheckPlayer == true then
         else
             game.Players.LocalPlayer.Character.Humanoid.WalkToPoint = (P.HumanoidRootPart.Position)
@@ -4238,19 +4249,28 @@ if isAnimeDimensions then
     end
 
     function Tween(P)
+        if not P or (typeof(P) == "Instance" and not P:FindFirstChild("HumanoidRootPart")) then return end
         if game:GetService("Players").LocalPlayer.PlayerGui.BattleGui.CenterUIFrame.RaidDataFrame.Visible == true and _G.DoNotThingIfHavePlayer == true and _G.CheckPlayer == true then
         else
-            game:GetService("TweenService"):Create(game.Players.LocalPlayer.Character.HumanoidRootPart,TweenInfo.new((getClosestMob().HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude/tonumber(_G.TWSpeed), Enum.EasingStyle.Linear),{CFrame = P}):Play()
+            pcall(function()
+                local targetCFrame = (typeof(P) == "Instance" and P:FindFirstChild("HumanoidRootPart") and P.HumanoidRootPart.CFrame) or P
+                local closest = getClosestMob()
+                local dist = closest and closest:FindFirstChild("HumanoidRootPart") and (closest.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude or 100
+                local speed = tonumber(_G.TWSpeed) or 200
+                game:GetService("TweenService"):Create(game.Players.LocalPlayer.Character.HumanoidRootPart, TweenInfo.new(dist / speed, Enum.EasingStyle.Linear), {CFrame = targetCFrame}):Play()
+            end)
         end
     end
 
     function melee()
         if _G.AutoMelee == true then
+            local _m = getClosestMob()
+            if not _m or not _m:FindFirstChild("HumanoidRootPart") then return end
             if _G.SelectAttackMethod == "Remote" then
                 if game.Players.LocalPlayer.Character:FindFirstChild("Bow") then
-                    game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position),["combo"] = 3},"BasicAttack")
+                    game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position),["combo"] = 3},"BasicAttack")
                 else
-                    game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position),["attackNumber"] = 4},"BasicAttack")
+                    game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position),["attackNumber"] = 4},"BasicAttack")
                 end
             elseif _G.SelectAttackMethod == "Click" then
                 game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, true, game, 1)
@@ -4260,26 +4280,28 @@ if isAnimeDimensions then
     end
     function skill()
         if _G.AutoSkill == true then
+            local _m = getClosestMob()
+            if not _m or not _m:FindFirstChild("HumanoidRootPart") then return end
             if _G.skill1 == "5" and game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill5"].Visible == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill1].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill1))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill1))
             elseif _G.skill1 ~= "5" and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill1].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill1))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill1))
             elseif _G.skill2 == "5" and game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill5"].Visible == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill2].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill2))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill2))
             elseif _G.skill2 ~= "5" and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill2].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill2))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill2))
             elseif _G.skill3 == "5" and game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill5"].Visible == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill3].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill3))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill3))
             elseif _G.skill3 ~= "5" and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill3].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill3))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill3))
             elseif _G.skill4 == "5" and game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill5"].Visible == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill4].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill4))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill4))
             elseif _G.skill4 ~= "5" and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill4].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill4))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill4))
             elseif _G.skill5 == "5" and game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill5"].Visible == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill5].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill5))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill5))
             elseif _G.skill5 ~= "5" and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder["Skill".._G.skill5].SkillName.Text) == nil then
-                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},tonumber(_G.skill5))
+                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},tonumber(_G.skill5))
             end
         end
     end
@@ -4299,7 +4321,7 @@ if isAnimeDimensions then
                 pcall(function()
                     if game:GetService("Players").LocalPlayer.PlayerGui.BattleGui.CenterUIFrame.RaidDataFrame.Visible == true and _G.DoNotThingIfHavePlayer == true and _G.CheckPlayer == true then
                     else
-                    Distance = (getClosestMob().HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                    Distance = safeGetMobDistance()
                         if game.PlaceId ~= 6938803436 and game.PlaceId ~= 7274690025 and game.PlaceId ~= 7338881230 and Distance <= tonumber(_G.DistanceToSkill) then
                             if _G.AutoMelee == true and _G.AutoSkill == true then
                                 skillmelee()
@@ -4319,7 +4341,7 @@ if isAnimeDimensions then
         pcall(function()
             while wait(1) do
                 pcall(function()
-                    Distance = (getClosestMob().HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                    Distance = safeGetMobDistance()
                     if game.PlaceId ~= 6938803436 and game.PlaceId ~= 7274690025 and game.PlaceId ~= 7338881230 then
                         if Distance > 500 then
                             if workspace.GameMap:FindFirstChild("Curse Dimension") then
@@ -4339,13 +4361,16 @@ if isAnimeDimensions then
         pcall(function()
             while wait(0.2) do
                 pcall(function()
-                    Distance = (getClosestMob().HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                    Distance = safeGetMobDistance()
                     if game.PlaceId ~= 6938803436 and game.PlaceId ~= 7274690025 and game.PlaceId ~= 7338881230 then
                         if Distance <= 30 then
-                            if _G.AutoAssistSkill == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist1.SkillName.Text) == nil or tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist1.SkillName.Text) == 0 then
-                                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseAssistSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},1)
-                            elseif _G.AutoAssistSkill == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist2.SkillName.Text) == nil or tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist2.SkillName.Text) == 0 then
-                                game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseAssistSkill",{["hrpCFrame"] = CFrame.new(getClosestMob().HumanoidRootPart.Position)},2)
+                            local _m = getClosestMob()
+                            if _m and _m:FindFirstChild("HumanoidRootPart") then
+                                if _G.AutoAssistSkill == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist1.SkillName.Text) == nil or tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist1.SkillName.Text) == 0 then
+                                    game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseAssistSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},1)
+                                elseif _G.AutoAssistSkill == true and tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist2.SkillName.Text) == nil or tonumber(game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.SlotsHolder.SkillAssist2.SkillName.Text) == 0 then
+                                    game:GetService("ReplicatedStorage").RemoteEvents.MainRemoteEvent:FireServer("UseAssistSkill",{["hrpCFrame"] = CFrame.new(_m.HumanoidRootPart.Position)},2)
+                                end
                             end
                         end
                     end
@@ -4439,10 +4464,10 @@ if isAnimeDimensions then
                                 v.Velocity, v.RotVelocity = V3, V3
                             end
                         end
-                        if game:GetService("Players").LocalPlayer.PlayerGui.BattleGui.CenterUIFrame.BossHealthFrame.Visible == true then
-                            Tween(getClosestBoss().HumanoidRootPart.CFrame * MethodFarm or CFrame.new(0,0,_G.Distance))
-                        elseif game:GetService("Players").LocalPlayer.PlayerGui.BattleGui.CenterUIFrame.BossHealthFrame.Visible == false then
-                            Tween(getClosestMob().HumanoidRootPart.CFrame * MethodFarm or CFrame.new(0,0,_G.Distance))
+                        local _isBossPhase = game:GetService("Players").LocalPlayer.PlayerGui.BattleGui.CenterUIFrame.BossHealthFrame.Visible
+                        local _target = _isBossPhase and getClosestBoss() or getClosestMob()
+                        if _target and _target:FindFirstChild("HumanoidRootPart") then
+                            Tween(_target.HumanoidRootPart.CFrame * MethodFarm)
                         end
                     end
                 end
@@ -4718,70 +4743,70 @@ if isAnimeDimensions then
                 pcall(function()
                     if _G.AutoSelectMap == true then
                         Lvl = game.Players.LocalPlayer.leaderstats.Level.Value
-                        if Lvl > 0 and Lvl < 6 then
+                        if Lvl >= 1 and Lvl <= 5 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Titan Dimension"
-                        elseif Lvl > 5 and Lvl < 11 then
+                        elseif Lvl >= 6 and Lvl <= 10 then
                             _G.Difficulty = "Hard"
-                             _G.MapSelection = "Titan Dimension"
-                        elseif Lvl > 10 and Lvl < 16 then
+                            _G.MapSelection = "Titan Dimension"
+                        elseif Lvl >= 11 and Lvl <= 15 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Titan Dimension"
-                        elseif Lvl > 15 and Lvl < 21 then
+                        elseif Lvl >= 16 and Lvl <= 20 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Demon Dimension"
-                        elseif Lvl > 20 and Lvl < 26 then
+                        elseif Lvl >= 21 and Lvl <= 25 then
                             _G.Difficulty = "Hard"
                             _G.MapSelection = "Demon Dimension"
-                        elseif Lvl > 25 and Lvl < 31 then
+                        elseif Lvl >= 26 and Lvl <= 30 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Demon Dimension"
-                        elseif Lvl > 30 and Lvl < 36 then
+                        elseif Lvl >= 31 and Lvl <= 35 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Curse Dimension"
-                        elseif Lvl > 35 and Lvl < 41 then
+                        elseif Lvl >= 36 and Lvl <= 40 then
                             _G.Difficulty = "Hard"
                             _G.MapSelection = "Curse Dimension"
-                        elseif Lvl > 40 and Lvl < 46 then
+                        elseif Lvl >= 41 and Lvl <= 45 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Curse Dimension"
-                        elseif Lvl > 45 and Lvl < 51 then
+                        elseif Lvl >= 46 and Lvl <= 50 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Villain Dimension"
-                        elseif Lvl > 50 and Lvl < 56 then
+                        elseif Lvl >= 51 and Lvl <= 55 then
                             _G.Difficulty = "Hard"
                             _G.MapSelection = "Villain Dimension"
-                        elseif Lvl > 55 and Lvl < 61 then
+                        elseif Lvl >= 56 and Lvl <= 60 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Villain Dimension"
-                        elseif Lvl > 60 and Lvl < 68 then
+                        elseif Lvl >= 61 and Lvl <= 67 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Sword Dimension"
-                        elseif Lvl > 67 and Lvl < 76 then
+                        elseif Lvl >= 68 and Lvl <= 75 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Sword Dimension"
-                        elseif Lvl > 75 and Lvl < 83 then
+                        elseif Lvl >= 76 and Lvl <= 82 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Ghoul Dimension"
-                        elseif Lvl > 82 and Lvl < 91 then
+                        elseif Lvl >= 83 and Lvl <= 90 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Ghoul Dimension"
-                        elseif Lvl > 90 and Lvl < 98 then
+                        elseif Lvl >= 91 and Lvl <= 97 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Fate Dimension"
-                        elseif Lvl > 97 and Lvl < 106 then
+                        elseif Lvl >= 98 and Lvl <= 105 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Fate Dimension"
-                        elseif Lvl > 105 and Lvl < 113 then
+                        elseif Lvl >= 106 and Lvl <= 112 then
                             _G.Difficulty = "Easy"
                             _G.MapSelection = "Slime Dimension"
-                        elseif Lvl > 112 and Lvl < 121 then
+                        elseif Lvl >= 113 and Lvl <= 120 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Slime Dimension"
-                        elseif Lvl > 120 and Lvl < 131 then
+                        elseif Lvl >= 121 and Lvl <= 130 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Devil Dimension"
-                        elseif Lvl > 130 then
+                        elseif Lvl >= 131 then
                             _G.Difficulty = "Nightmare"
                             _G.MapSelection = "Pirate Dimension"
                         end
@@ -4843,7 +4868,7 @@ if isAnimeDimensions then
                     if _G.SendIfLevelUp == true then
                         repeat wait(1) until game:GetService("Players").LocalPlayer.PlayerGui.UniversalGui.UniversalCenterUIFrame.LevelUpImage.Visible == true
                         function webhook(data)
-                            local request = http_request or request or HttpPost or syn.request
+                            local request = http_request or request or HttpPost or (syn and syn.request) or (fluxus and fluxus.request)
                             request({Url = _G.UrlWebhook,
                             Method = "POST",
                             Headers = {["Content-Type"] = "application/json"},
@@ -4978,7 +5003,7 @@ if isAnimeDimensions then
                             table.insert(itemnum,text)
                         end
                         function webhook(data)
-                            local request = http_request or request or HttpPost or syn.request
+                            local request = http_request or request or HttpPost or (syn and syn.request) or (fluxus and fluxus.request)
                             request({
                             Url = _G.UrlWebhook,
                             Method = "POST",
@@ -5026,37 +5051,11 @@ if isAnimeDimensions then
                 pcall(function()
                     if _G.DontNoclip == true then
                         for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-                            if v:IsA("BasePart") then
-                                v.CanCollide = true
-                            end
+                            if v:IsA("BasePart") then v.CanCollide = true end
                         end
                     else
-                        if _G.DodgeSkill == true and game.PlaceId ~= 6938803436 and game.PlaceId ~= 7274690025 and game.PlaceId ~= 7338881230 then
-                            if _G.Automob == false and _G.DodgeSkill == true then
-                                for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-                                    if v:IsA("BasePart") then
-                                        v.CanCollide = true
-                                    end
-                                end
-                            elseif workspace.Folders.Debris:FindFirstChild("DodgePart") then
-                                for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-                                    if v:IsA("BasePart") then
-                                        v.CanCollide = true
-                                    end
-                                end
-                            elseif not workspace.Folders.Debris:FindFirstChild("DodgePart") then
-                                for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-                                    if v:IsA("BasePart") then
-                                        v.CanCollide = false
-                                    end
-                                end
-                            end
-                        elseif _G.DodgeSkill == false and game.PlaceId ~= 6938803436 and game.PlaceId ~= 7274690025 and game.PlaceId ~= 7338881230 then
-                            for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-                                if v:IsA("BasePart") then
-                                    v.CanCollide = false
-                                end
-                            end
+                        for i,v in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
+                            if v:IsA("BasePart") then v.CanCollide = false end
                         end
                     end
                 end)
@@ -5122,26 +5121,7 @@ if isAnimeDimensions then
         end)
     end)
 
-    spawn(function()
-        pcall(function()
-            while wait(2) do
-                pcall(function()
-                    if _G.AutoRedeemAllCode == true then
-                        Code = {}
-                        for i,v in pairs(workspace.Leaderboards.MilestoneBoard.Center.Surface.ScrollingFrame:GetChildren()) do
-                            if v.ClassName == "Frame" then
-                                Code = {v.MilestoneCode.Text}
-                            end
-                        end
-                        for i,v in pairs(Code) do
-                            game:GetService("ReplicatedStorage").RemoteFunctions.MainRemoteFunction:InvokeServer("RedeemPromoCode",v)
-                        end
-                        wait(600)
-                    end
-                end)
-            end
-        end)
-    end)
+
 
 
 
@@ -5186,10 +5166,10 @@ if isAnimeDimensions then
     local TabSetting = Window:CreateTab("Misc")
     local Setting1 = TabSetting:CreateSector("Section1", "left")
     Setting1:AddTextbox("Speed" , "16" , function(w)
-        _G.Speed = w
+        _G.Speed = tonumber(w) or 16
     end)
     Setting1:AddTextbox("Jump" , "50" , function(w)
-        _G.Jump = w
+        _G.Jump = tonumber(w) or 50
     end)
     Setting1:AddToggle("WalkSpeed", false, function(t)
 		_G.WalkSpeed = t
@@ -5227,7 +5207,7 @@ if isAnimeDimensions then
             pcall(function()
                 if _G.WalkSpeed then
                     pcall(function()
-                        game.Players.LocalPlayer.character.Humanoid.WalkSpeed = tonumber(_G.Speed)
+                        game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = tonumber(_G.Speed)
                     end)
                 end
             end)
@@ -5240,7 +5220,7 @@ if isAnimeDimensions then
             pcall(function()
                 if _G.JumpPower then
                     pcall(function()
-                        game.Players.LocalPlayer.character.Humanoid.JumpPower = tonumber(_G.Jump)
+                        game.Players.LocalPlayer.Character.Humanoid.JumpPower = tonumber(_G.Jump)
                     end)
                 end
             end)
@@ -5311,7 +5291,7 @@ if isAnimeDimensions then
         setclipboard("https://discord.gg/48geaWzacy")
     end)
     Setting2:AddButton("JoinDiscord" , function()
-        request = http_request or request or HttpPost or syn.request
+        local request = http_request or request or HttpPost or (syn and syn.request) or (fluxus and fluxus.request)
         request({Url = "http://127.0.0.1:6463/rpc?v=1",Method = "POST",Headers = {["Content-Type"] = "application/json",["origin"] = "https://discord.com",},Body = game:GetService("HttpService"):JSONEncode({["args"] = {["code"] = "48geaWzacy",},["cmd"] = "INVITE_BROWSER",["nonce"] = "."})})
     end)
 
@@ -5327,7 +5307,7 @@ if isAnimeDimensions then
                                 v.main.Visible = not v.main.Visible
                             end
                         end
-                        wait(99999999999999999999999)
+                        while true do task.wait(1) end
                     end)
                 end
             end)
@@ -5340,12 +5320,12 @@ if isAnimeDimensions then
     		if _G.BootsWhitescreen then
     		    wait()
                 local v0;local v1=game;local v2=v1.Workspace;local v3=v1.Lighting;local v4=v2.Terrain;v4.WaterWaveSize=0;v4.WaterWaveSpeed=0;v4.WaterReflectance=0;v4.WaterTransparency=0;v3.GlobalShadows=false;v3.FogEnd=8999999488;v3.Brightness=0;settings().Rendering.QualityLevel="Level01";for v18,v19 in pairs(v1:GetDescendants()) do if (v19:IsA("Part") or v19:IsA("Union") or v19:IsA("CornerWedgePart") or v19:IsA("TrussPart")) then v19.Material="Plastic";v19.Reflectance=0;elseif (v19:IsA("Decal") or (v19:IsA("Texture") and v0)) then v19.Transparency=1;elseif (v19:IsA("ParticleEmitter") or v19:IsA("Trail")) then v19.Lifetime=NumberRange.new(0);elseif v19:IsA("Explosion") then v19.BlastPressure=1;v19.BlastRadius=1;elseif (v19:IsA("Fire") or v19:IsA("SpotLight") or v19:IsA("Smoke")) then v19.Enabled=false;elseif v19:IsA("MeshPart") then v19.Material="Plastic";v19.Reflectance=0;v19.TextureID=10385902758728956;end end for v20,v21 in pairs(v3:GetChildren()) do if (v21:IsA("BlurEffect") or v21:IsA("SunRaysEffect") or v21:IsA("ColorCorrectionEffect") or v21:IsA("BloomEffect") or v21:IsA("DepthOfFieldEffect")) then v21.Enabled=false;end end local v13=game:GetService("UserInputService");local v14=game:GetService("RunService");local v15=function()v14:Set3dRenderingEnabled(false);return;end;local v16=function()v14:Set3dRenderingEnabled(true);return;end;local v17=function()v13.WindowFocusReleased:Connect(v15);v13.WindowFocused:Connect(v16);return;end;v17();
-    			wait(99999999999999999999999)
+    			while true do task.wait(1) end
     		end
     	end
     end)
     end)
-	game:GetService("Players").LocalPlayer.Idled:connect(function()
+	game:GetService("Players").LocalPlayer.Idled:Connect(function()
 		game:GetService("VirtualUser"):CaptureController()
 		game:GetService("VirtualUser"):ClickButton2(Vector2.new())
 	end)
